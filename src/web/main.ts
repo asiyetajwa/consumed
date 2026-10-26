@@ -1,5 +1,6 @@
 // Consumed: the app. Three pages (Today, Friends, Tonight) and the log sheet.
 
+import { searchCatalog } from '../shared/catalog.js';
 import type { Category, IdentifyResponse, Identified, Status } from '../shared/types.js';
 import { renderCard, summary } from './card.js';
 import { confetti } from './confetti.js';
@@ -34,7 +35,8 @@ function go(next: View, push = true) {
   }
   document.querySelectorAll<HTMLButtonElement>('.pillnav button').forEach((b) => b.toggleAttribute('aria-current', b.dataset.go === next));
   document.querySelectorAll<HTMLButtonElement>('.pillnav button[aria-current]').forEach((b) => b.setAttribute('aria-current', 'page'));
-  (document.querySelector('meta[name="theme-color"]') as HTMLMetaElement).content = next === 'tonight' ? '#140b06' : '#fcf9ec';
+  const tc = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (tc) tc.content = next === 'tonight' ? '#140b06' : '#fcf9ec';
   if (next === 'friends') renderFriends();
   if (next === 'tonight') renderTonight();
   if (push) history.replaceState(null, '', `#${next}`);
@@ -374,9 +376,7 @@ async function identify() {
   $('scan-text').textContent = status?.live ? 'Muse Spark is looking' : 'Finding it';
   ($('q') as HTMLInputElement).blur();
   try {
-    const res = await fetch('api/identify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ category: cat, query: query || undefined, image: photo ?? undefined }) });
-    const body = (await res.json()) as IdentifyResponse & { error?: string };
-    if (!res.ok) throw new Error(body.error ?? 'Something went wrong. Try again.');
+    const body = status ? await askServer(query) : offline(query);
     if (!body.item.found) throw new Error(photo ? 'Muse could not spot a song, book or bite in that one. Try another photo or type it.' : 'Nothing found. Try another way of saying it.');
     found = { ...body };
     if (photo && body.item.box) {
@@ -390,6 +390,19 @@ async function identify() {
   } finally {
     $('scan').hidden = true;
   }
+}
+
+async function askServer(query: string): Promise<IdentifyResponse> {
+  const res = await fetch('api/identify', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ category: cat, query: query || undefined, image: photo ?? undefined }) });
+  const body = (await res.json()) as IdentifyResponse & { error?: string };
+  if (!res.ok) throw new Error(body.error ?? 'Something went wrong. Try again.');
+  return body;
+}
+
+/** With no server at all (a static copy of the app), search runs on the demo catalog in the browser. */
+function offline(query: string): IdentifyResponse {
+  if (!query) throw new Error('Photo reading needs live mode. Type what it is instead.');
+  return { item: searchCatalog(query, cat), source: 'demo' };
 }
 
 function showResult() {
@@ -616,7 +629,8 @@ function toast(text: string, action?: () => void) {
 
 async function loadStatus() {
   try {
-    status = (await (await fetch('api/status')).json()) as Status;
+    const res = await fetch('api/status');
+    status = res.ok ? ((await res.json()) as Status) : null;
   } catch {
     status = null;
   }

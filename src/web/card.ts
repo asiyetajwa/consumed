@@ -11,9 +11,10 @@ export function summary(items: Sticker[]): string {
   const n = (c: string) => items.filter((i) => i.category === c).length;
   const parts: string[] = [];
   const a = n('audio'), b = n('book'), f = n('food');
-  if (a) parts.push(a === 1 ? 'a song' : `${String(a)} things to hear`);
-  if (b) parts.push(b === 1 ? 'a book' : `${String(b)} books`);
-  if (f) parts.push(f === 1 ? 'a bite' : `${String(f)} bites`);
+  const word = (k: number) => ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][k] ?? String(k);
+  if (a) parts.push(a === 1 ? 'a song' : `${word(a)} things to hear`);
+  if (b) parts.push(b === 1 ? 'a book' : `${word(b)} books`);
+  if (f) parts.push(f === 1 ? 'a bite' : `${word(f)} bites`);
   if (parts.length === 0) return 'A quiet day';
   const last = parts.pop()!;
   const text = parts.length ? `${parts.join(', ')} and ${last}` : last;
