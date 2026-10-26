@@ -51,6 +51,7 @@ A per-visitor hourly allowance keeps a public deployment from draining the budge
 
 - **A welcome, one question at a time.** Each answer collapses into a ticked line, a ring counts the steps, the line beside it changes with each step, and it ends with a thank you that types itself out.
 
+- **Depth cards.** A friend's three things sit on one card that looks like a thick piece of glass: the picture stacked in translucent layers. Each tap tilts it in 3D, fans the layers apart, and turns to the next thing with its own sound. Tonight's Consumed card turns the same way when you tap it.
 - **Everything is a sticker.** Drag to move, twist with two fingers to turn and resize. On a computer, scroll to turn, or use the arrow keys and `[` `]`. A new sticker drops in with a wobble.
 - **Sound on the core loop.** A pop when a sticker lands, then the item's own sound:
   - a chime for music and audiobooks;

@@ -9,6 +9,7 @@ import { isMuted, play, setMuted, soundFor, unlock } from './sound.js';
 import { artFor, catalogArt, fetchArt, loadManifest } from './artwork.js';
 import { makeCutout, requestCutout } from './cutout.js';
 import { runOnboarding } from './onboarding.js';
+import { deckHtml, flip } from './deck.js';
 import { cropPhoto, downsize, stickerSvg } from './stickers.js';
 import { dayKey, load, loggedDays, save, startFresh, type State, type Sticker } from './store.js';
 
@@ -565,6 +566,24 @@ $('stick').addEventListener('click', () => {
 });
 
 // ---------- friends ----------
+const escAttr = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const escText = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+/** One face of a depth card: the cover or photo filling the tile, or a cut-out on a soft tint of its colors. */
+function tileFor(it: Identified): string {
+  const a = artFor(it);
+  const tint = `color-mix(in srgb, ${it.colors[0] === '#1b1716' ? it.colors[1] : it.colors[0]} 26%, #fcf9ec)`;
+  if (a.photo && a.frame !== 'cutout') return `<img class="tile-img" src="${escAttr(a.photo)}" alt="">`;
+  if (a.photo) return `<div class="tile-cut" style="background:${tint}"><img src="${escAttr(a.photo)}" alt=""></div>`;
+  return `<div class="tile-cut" style="background:${tint}">${fitted(it, 130)}</div>`;
+}
+
+function deckCaption(it: Identified, i: number, n: number): string {
+  const by = it.category === 'food' ? it.detail : (it.creator.split(/,| read by /)[0] ?? '');
+  const dots = Array.from({ length: n }, (_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('');
+  return `<b>${escText(it.title)}</b><span>${escText(by)}</span><div class="dots">${dots}</div><small>Tap the card</small>`;
+}
+
 const count = (n: number | undefined, mine: boolean) => { const t = (n ?? 0) + (mine ? 1 : 0); return t ? String(t) : ''; };
 function renderFriends() {
   const ms = matches(state);
@@ -575,7 +594,8 @@ function renderFriends() {
     parts.push(`<article class="match pop"><small>A match this week</small><p></p><div class="avs">${avatar('sam', state.name)}${avatar(top.friend.id, top.friend.name)}</div><div class="art">${svg}</div></article>`);
   }
   for (const f of FRIENDS.filter((x) => !state.circle || state.circle.includes(x.id))) {
-    const mini = f.items.map((it, i) => `<div style="transform:rotate(${String([-7, 6, -3][i] ?? 0)}deg)">${fitted(it, 82)}</div>`).join('');
+    const first = f.items[0]!;
+    const mini = `<div class="deck-wrap" data-friend="${f.id}" data-i="0" role="button" tabindex="0" aria-label="${f.name}'s things today. Tap for the next one.">${deckHtml(tileFor(first), 'friend-deck')}</div><div class="deck-cap">${deckCaption(first, 0, f.items.length)}</div>`;
     const mine = state.reacted[f.id] ?? [];
     const reacts = REACTIONS.map((r) => `<button data-react="${f.id}" data-emoji="${r}" aria-pressed="${String(mine.includes(r))}" aria-label="React ${r}">${r}<span>${count(f.reactions[r], mine.includes(r))}</span></button>`).join('');
     const flicked = state.flicked.filter((x) => x.to === f.id).at(-1);
@@ -591,7 +611,31 @@ function renderFriends() {
   });
   $('friends-count').textContent = ms.length ? `${String(ms.length)} ${ms.length === 1 ? 'match' : 'matches'}` : '';
 }
+// A friend's three things live on one depth card: each tap turns it to the next, with that thing's own sound.
+function nextThing(wrap: HTMLElement) {
+  if (wrap.dataset.busy) return;
+  const f = FRIENDS.find((x) => x.id === wrap.dataset.friend);
+  if (!f) return;
+  const i = (Number(wrap.dataset.i) + 1) % f.items.length;
+  const it = f.items[i]!;
+  wrap.dataset.i = String(i);
+  wrap.dataset.busy = '1';
+  play('pop', { volume: 0.35, rate: 1.4 });
+  setTimeout(() => {
+    wrap.parentElement!.querySelector('.deck-cap')!.innerHTML = deckCaption(it, i, f.items.length);
+    play(soundFor(it.category, it.kind), { volume: 0.7 });
+  }, 380);
+  void flip(wrap.querySelector<HTMLElement>('.deck')!, tileFor(it)).then(() => delete wrap.dataset.busy);
+}
+
+$('feed').addEventListener('keydown', (e) => {
+  const w = (e.target as HTMLElement).closest<HTMLElement>('.deck-wrap');
+  if (w && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); nextThing(w); }
+});
+
 $('feed').addEventListener('click', (e) => {
+  const w = (e.target as HTMLElement).closest<HTMLElement>('.deck-wrap');
+  if (w) { nextThing(w); return; }
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-react]');
   if (!b) return;
   const id = b.dataset.react!, emoji = b.dataset.emoji!;
@@ -651,7 +695,12 @@ function renderTonight() {
 }
 
 $('crack-btn').addEventListener('click', () => void crack());
-$('stage').addEventListener('click', () => { if ($('stage').classList.contains('idle')) void crack(); });
+$('stage').addEventListener('click', (e) => {
+  if ($('stage').classList.contains('idle')) { void crack(); return; }
+  // The finished card turns in your hand like a piece of glass.
+  const deck = (e.target as HTMLElement).closest('#card')?.querySelector<HTMLElement>('.deck');
+  if (deck && $('stage').classList.contains('open')) { play('pop', { volume: 0.4, rate: 1.3 }); void flip(deck); }
+});
 
 async function crack() {
   const items = today();
@@ -682,9 +731,10 @@ async function crack() {
   cardBlob = await renderCard(items, { date: new Date(), name: state.name, chain: loggedDays(state), painting });
   if (cardUrl) URL.revokeObjectURL(cardUrl);
   cardUrl = URL.createObjectURL(cardBlob);
-  const img = $('card-img') as HTMLImageElement;
+  const img = new Image();
   img.src = cardUrl;
   await img.decode().catch(() => undefined);
+  $('card').innerHTML = deckHtml(`<img src="${cardUrl}" alt="">`, 'card-deck');
   stage.className = 'capsule-stage open';
   play('crack');
   const r = stage.getBoundingClientRect();
