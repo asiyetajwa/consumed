@@ -38,6 +38,10 @@ export interface State {
   dareDone: Record<string, boolean>;
   cards: Record<string, string>;
   sample: boolean;
+  /** Set once the first-open questions are answered. */
+  onboarded?: boolean;
+  /** Friend ids in your circle. */
+  circle?: string[];
 }
 
 const KEY = 'consumed:v1';

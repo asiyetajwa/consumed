@@ -61,7 +61,7 @@
 
     <section class="view night" id="v-tonight" aria-label="Tonight">
       <div class="reveal" id="reveal">
-        <p class="hint" id="tonight-hint">Your day is sealed inside</p>
+        <div class="night-head"><img class="nibs night-nibs" id="night-nibs" src="mascot/sleepy.png" alt="" data-pose="sleepy" draggable="false"><p class="hint" id="tonight-hint">Your day is sealed inside</p></div>
         <div class="capsule-stage" id="stage">
           <svg class="shell top-shell" viewBox="0 0 250 124" aria-hidden="true"><path d="M8 122 C 8 40, 70 4, 125 4 S 242 40, 242 122 L 205 106 L 175 122 L 140 102 L 110 122 L 78 102 L 45 122 Z" fill="#f6b52a"/><path d="M44 68 C 64 30, 120 16, 168 24" stroke="#fff3c4" stroke-width="10" fill="none" stroke-linecap="round" opacity=".7"/></svg>
           <svg class="shell bot-shell" viewBox="0 0 250 124" aria-hidden="true"><path d="M8 2 L 45 18 L 78 2 L 110 22 L 140 2 L 175 22 L 205 2 L 242 18 C 242 82, 190 120, 125 120 S 8 82, 8 2 Z" fill="#e8432e"/><path d="M40 50 C 56 84, 92 100, 124 102" stroke="#fff" stroke-opacity=".25" stroke-width="9" fill="none" stroke-linecap="round"/></svg>
@@ -86,6 +86,7 @@
     <button class="round small" id="log-close" aria-label="Close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
     </button>
+    <img class="nibs log-nibs" id="log-nibs" src="mascot/idle.png" alt="" data-pose="idle" draggable="false">
     <h2 id="log-title">Log Something</h2>
     <span class="muse-badge" id="muse-badge"></span>
   </div>
@@ -158,16 +159,18 @@
 <div class="scrim" id="menu" hidden>
   <div class="menu" role="dialog" aria-modal="true" aria-label="Settings">
     <div class="grab"></div>
-    <div class="me"><img class="av big" src="avatars/sam.jpg" alt="" width="52" height="52"><div><b>Sam</b><span id="me-days"></span></div></div>
+    <div class="me"><img class="av big" src="avatars/sam.jpg" alt="" width="52" height="52"><div><b id="me-name">Sam</b><span id="me-days"></span></div></div>
     <label class="row"><span>Sounds</span><span class="toggle"><input type="checkbox" id="sound-toggle" role="switch" checked><i></i></span></label>
     <div class="row"><span>Muse</span><span class="status" id="muse-status">Checking</span></div>
     <p class="fine" id="muse-reason"></p>
+    <button class="ghost wide" id="replay">Replay the Welcome</button>
     <button class="ghost wide" id="fresh">Start Fresh</button>
     <p class="fine">Your log stays in this browser. Friends here are sample friends.</p>
   </div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div id="onboard"></div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

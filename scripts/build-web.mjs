@@ -7,6 +7,7 @@ await build({ entryPoints: { app: 'src/web/main.ts' }, bundle: true, format: 'es
 for (const f of ['index.html', 'styles.css', 'icon.svg']) await cp(`src/web/${f}`, `dist/${f}`);
 await cp('src/web/sfx', 'dist/sfx', { recursive: true });
 await cp('src/web/avatars', 'dist/avatars', { recursive: true });
+await cp('src/web/mascot', 'dist/mascot', { recursive: true, filter: (f) => !f.includes('/raw') });
 // Artwork: third-party covers from `npm run fetch-art` (art/) and our own demo food photos (demo-art/).
 import { existsSync } from 'node:fs';
 if (existsSync('art')) await cp('art', 'dist/art', { recursive: true });

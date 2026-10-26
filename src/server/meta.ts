@@ -202,6 +202,25 @@ export class Meta {
     return this.generate(picturePrompt(visual), 'picture');
   }
 
+  /** Muse Image edits a picture (keeping everything else), through the spend guard. */
+  async edit(image: string, prompt: string, scope: string): Promise<{ image: string; costUsd: number }> {
+    const price = PRICES['muse-image-1.0'].perImage;
+    const release = this.guard.reserve(price);
+    let ok = false;
+    let ms = 0;
+    try {
+      const out = await this.post('/images/edits', { model: IMAGE_MODEL, prompt, images: [{ image_url: image }], n: 1, output_format: 'png', response_format: 'b64_json' });
+      ms = out.ms;
+      const b64 = (out.json as { data?: { b64_json?: string }[] }).data?.[0]?.b64_json;
+      if (!b64) throw new Error('Muse Image returned no image.');
+      ok = true;
+      return { image: `data:image/png;base64,${b64}`, costUsd: price };
+    } finally {
+      release();
+      this.guard.record({ at: new Date().toISOString(), scope, model: IMAGE_MODEL, tokensIn: 0, tokensOut: 0, costUsd: ok ? price : 0, latencyMs: ms, ok });
+    }
+  }
+
   /** One square Muse Image picture from a prompt, through the spend guard. */
   async generate(prompt: string, scope: string): Promise<{ image: string; costUsd: number }> {
     const price = PRICES['muse-image-1.0'].perImage;

@@ -8,6 +8,8 @@ import { alsoHas, FRIENDS, matches, matchLine, REACTIONS } from './friends.js';
 import { isMuted, play, setMuted, soundFor, unlock } from './sound.js';
 import { artFor, catalogArt, fetchArt, loadManifest } from './artwork.js';
 import { makeCutout, requestCutout } from './cutout.js';
+import { pose } from './nibs.js';
+import { runOnboarding } from './onboarding.js';
 import { cropPhoto, downsize, stickerSvg } from './stickers.js';
 import { dayKey, load, loggedDays, save, startFresh, type State, type Sticker } from './store.js';
 
@@ -178,7 +180,10 @@ function renderToday() {
 function renderTally() {
   const items = today();
   const n = (c: Category) => items.filter((s) => s.category === c).length;
-  $('tally').innerHTML = (['audio', 'book', 'food'] as Category[]).map((c) => `<span class="t-${c}"><i></i>${{ audio: 'Listened', book: 'Read', food: 'Ate' }[c]} <b>${String(n(c))}</b></span>`).join('');
+  const before = $('tally').dataset.counts ?? '';
+  const now = (['audio', 'book', 'food'] as Category[]).map((c) => String(n(c))).join(',');
+  $('tally').innerHTML = (['audio', 'book', 'food'] as Category[]).map((c, i) => `<span class="t-${c}${before && before.split(',')[i] !== now.split(',')[i] ? ' bump' : ''}"><i></i>${{ audio: 'Listened', book: 'Read', food: 'Ate' }[c]} <b>${String(n(c))}</b></span>`).join('');
+  $('tally').dataset.counts = now;
 }
 
 function renderChain(grow: boolean) {
@@ -201,7 +206,7 @@ function renderDare() {
     persist();
     const r = el.getBoundingClientRect();
     setTimeout(() => confetti(r.left + r.width / 2, r.top, 60, 0.6), 700);
-    setTimeout(() => toast(`Dare done. ${leo.name} gets a ping.`), 900);
+    setTimeout(() => toast(`Dare done. ${leo.name} gets a ping.`, undefined, leo.id), 900);
   }
 }
 
@@ -349,7 +354,7 @@ function stick(item: Identified, extra: Partial<Sticker>) {
     renderDare();
     if (firstToday) renderChain(true);
     const m = matches(state).find((mm) => mm.mine.id === s.id);
-    if (m) toast(`${m.friend.name} has this too. See Friends.`, () => go('friends'));
+    if (m) toast(`${m.friend.name} has this too`, () => go('friends'), m.friend.id);
   }, 1000);
 }
 
@@ -421,6 +426,8 @@ function openLog(start?: Category) {
   $('result').hidden = true; $('log-err').hidden = true; $('scan').hidden = true;
   setCat(cat);
   $('log').hidden = false;
+  pose($('log-nibs') as HTMLImageElement, 'wave');
+  setTimeout(() => pose($('log-nibs') as HTMLImageElement, 'idle'), 1200);
   const live = status?.live ?? false;
   $('muse-badge').textContent = live ? 'Muse Spark' : 'Demo';
   $('muse-badge').classList.toggle('demo', !live);
@@ -463,6 +470,7 @@ async function identify() {
   $('log-err').hidden = true;
   $('result').hidden = true;
   $('scan').hidden = false;
+  pose($('log-nibs') as HTMLImageElement, 'look');
   $('scan-text').textContent = status?.live ? 'Muse Spark is looking' : 'Finding it';
   ($('q') as HTMLInputElement).blur();
   try {
@@ -486,6 +494,7 @@ async function identify() {
     showResult();
   } catch (e) {
     showErr(e instanceof Error ? e.message : String(e));
+    pose($('log-nibs') as HTMLImageElement, 'idle');
   } finally {
     $('scan').hidden = true;
   }
@@ -539,7 +548,10 @@ function showResult() {
   const friend = alsoHas(it);
   const verb = it.category === 'book' ? 'is reading this too' : it.category === 'audio' ? 'played this today too' : 'had this today too';
   $('res-note').innerHTML = '';
-  $('res-note').append(document.createTextNode(it.note));
+  pose($('log-nibs') as HTMLImageElement, 'happy');
+  const typed = document.createTextNode('');
+  $('res-note').append(typed);
+  typeOut(typed, it.note);
   if (friend) {
     const b = document.createElement('b');
     b.textContent = ` ${friend.name} ${verb}.`;
@@ -554,8 +566,9 @@ $('stick').addEventListener('click', () => {
   if (!found) return;
   const golden = !$('finish').hidden && ($('finished') as HTMLInputElement).checked;
   const f = found;
-  closeLog();
-  setTimeout(() => stick(f.item, { photo: f.photo, ratio: f.ratio, cutout: f.cutout, artSource: f.artSource, golden, source: photo && f.item.category === 'food' ? 'photo' : 'search', model: f.model }), 120);
+  pose($('log-nibs') as HTMLImageElement, 'love');
+  setTimeout(closeLog, 420);
+  setTimeout(() => stick(f.item, { photo: f.photo, ratio: f.ratio, cutout: f.cutout, artSource: f.artSource, golden, source: photo && f.item.category === 'food' ? 'photo' : 'search', model: f.model }), 540);
 });
 
 // ---------- friends ----------
@@ -568,7 +581,7 @@ function renderFriends() {
     const svg = fitted(top.item, 100);
     parts.push(`<article class="match pop"><small>A match this week</small><p></p><div class="avs">${avatar('sam', state.name)}${avatar(top.friend.id, top.friend.name)}</div><div class="art">${svg}</div></article>`);
   }
-  for (const f of FRIENDS) {
+  for (const f of FRIENDS.filter((x) => !state.circle || state.circle.includes(x.id))) {
     const mini = f.items.map((it, i) => `<div style="transform:rotate(${String([-7, 6, -3][i] ?? 0)}deg)">${fitted(it, 82)}</div>`).join('');
     const mine = state.reacted[f.id] ?? [];
     const reacts = REACTIONS.map((r) => `<button data-react="${f.id}" data-emoji="${r}" aria-pressed="${String(mine.includes(r))}" aria-label="React ${r}">${r}<span>${count(f.reactions[r], mine.includes(r))}</span></button>`).join('');
@@ -598,7 +611,24 @@ $('feed').addEventListener('click', (e) => {
   b.setAttribute('aria-pressed', String(on));
   b.querySelector('span')!.textContent = count(f.reactions[emoji], on);
   b.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 260 });
+  if (on) burst(b, emoji);
 });
+
+/** A few copies of the emoji float up out of the button. */
+function burst(from: HTMLElement, emoji: string) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = from.getBoundingClientRect();
+  for (let i = 0; i < 6; i++) {
+    const e = document.createElement('span');
+    e.className = 'burst';
+    e.textContent = emoji;
+    e.style.left = `${String(r.left + r.width / 2)}px`;
+    e.style.top = `${String(r.top)}px`;
+    document.body.appendChild(e);
+    const dx = (Math.random() - 0.5) * 90, dy = -60 - Math.random() * 70;
+    e.animate([{ transform: 'translate(-50%, 0) scale(.6)', opacity: 1 }, { transform: `translate(calc(-50% + ${String(dx)}px), ${String(dy)}px) scale(1.2) rotate(${String(dx / 3)}deg)`, opacity: 0 }], { duration: 700 + i * 60, easing: 'cubic-bezier(.2,.8,.2,1)' }).onfinish = () => e.remove();
+  }
+}
 
 // ---------- tonight ----------
 let cardUrl: string | null = null;
@@ -611,6 +641,7 @@ function renderTonight() {
   const opened = stage.classList.contains('open') && cardUrl;
   if (opened) return;
   stage.className = 'capsule-stage idle';
+  pose($('night-nibs') as HTMLImageElement, 'sleepy');
   $('share').hidden = true;
   $('actions').hidden = false;
   stage.querySelector('.empty-night')?.remove();
@@ -664,6 +695,7 @@ async function crack() {
   await img.decode().catch(() => undefined);
   stage.className = 'capsule-stage open';
   play('crack');
+  pose($('night-nibs') as HTMLImageElement, 'happy');
   const r = stage.getBoundingClientRect();
   confetti(r.left + r.width / 2, r.top + r.height / 2, 160, 1.6);
   $('tonight-hint').textContent = painting ? 'Painted by Muse Image from your day' : 'Your day, on one card';
@@ -709,11 +741,13 @@ $('sound-btn').addEventListener('click', () => { setMuted(!isMuted()); syncSound
 ($('sound-toggle') as HTMLInputElement).addEventListener('change', (e) => { setMuted(!(e.target as HTMLInputElement).checked); syncSound(); play('pop'); });
 $('menu-btn').addEventListener('click', () => {
   const days = loggedDays(state);
+  $('me-name').textContent = state.name;
   $('me-days').textContent = `${String(days)} ${days === 1 ? 'day' : 'days'} logged`;
   $('fresh').textContent = 'Start Fresh';
   $('menu').hidden = false;
 });
 $('menu').addEventListener('click', (e) => { if (e.target === $('menu')) $('menu').hidden = true; });
+$('replay').addEventListener('click', () => { $('menu').hidden = true; startOnboarding(); });
 $('fresh').addEventListener('click', () => {
   const b = $('fresh');
   if (b.textContent !== 'Tap Again to Clear Everything') { b.textContent = 'Tap Again to Clear Everything'; return; }
@@ -730,9 +764,10 @@ document.addEventListener('keydown', (e) => {
 });
 
 let toastTimer = 0;
-function toast(text: string, action?: () => void) {
+function toast(text: string, action?: () => void, who?: string) {
   const t = $('toast');
   t.replaceChildren(document.createTextNode(text));
+  if (who) t.insertAdjacentHTML('afterbegin', `<img class="av" src="avatars/${who}.jpg" alt="">`);
   if (action) {
     const b = document.createElement('button');
     b.textContent = text.startsWith('Removed') ? 'Undo' : 'Open';
@@ -759,6 +794,29 @@ async function loadStatus() {
     : 'Search works from a small built-in catalog and the card is made from your stickers. Photos need live mode.';
 }
 
+/** Types text into a node a few letters at a time, the way Muse would say it. */
+function typeOut(node: Text, text: string) {
+  let i = 0;
+  const step = () => {
+    i = Math.min(text.length, i + 2);
+    node.textContent = text.slice(0, i);
+    if (i < text.length && node.isConnected) setTimeout(step, 16);
+  };
+  step();
+}
+
+function startOnboarding() {
+  runOnboarding($('onboard'), (a) => {
+    state.name = a.name;
+    state.circle = a.circle;
+    state.onboarded = true;
+    persist();
+    go('friends');
+    renderFriends();
+    setTimeout(() => toast('Maya waved hello', undefined, 'maya'), 700);
+  });
+}
+
 // ---------- start ----------
 syncSound();
 await loadManifest();
@@ -766,6 +824,7 @@ renderToday();
 const start = location.hash.slice(1);
 go((VIEWS as readonly string[]).includes(start) ? (start as View) : 'friends', false);
 void loadStatus();
+if (!state.onboarded) startOnboarding();
 window.addEventListener('hashchange', () => {
   const h = location.hash.slice(1);
   if ((VIEWS as readonly string[]).includes(h) && h !== view) go(h as View, false);
