@@ -49,7 +49,6 @@ A per-visitor hourly allowance keeps a public deployment from draining the budge
 
 ## Make it feel like a toy
 
-- **Nibs, the mascot,** reacts to every action: it waves on the welcome, peers through a magnifying glass while Muse Spark looks, cheers when it finds your item, gets heart eyes when you stick it, and dozes beside tonight's capsule. Nibs was painted once with Muse Image and edited into each expression so it stays the same character (`scripts/make-mascot.ts`), then cut out with SAM 3.1.
 - **A welcome, one question at a time.** Each answer collapses into a ticked line, a ring counts the steps, the line beside it changes with each step, and it ends with a thank you that types itself out.
 
 - **Everything is a sticker.** Drag to move, twist with two fingers to turn and resize. On a computer, scroll to turn, or use the arrow keys and `[` `]`. A new sticker drops in with a wobble.

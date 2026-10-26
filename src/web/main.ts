@@ -8,7 +8,6 @@ import { alsoHas, FRIENDS, matches, matchLine, REACTIONS } from './friends.js';
 import { isMuted, play, setMuted, soundFor, unlock } from './sound.js';
 import { artFor, catalogArt, fetchArt, loadManifest } from './artwork.js';
 import { makeCutout, requestCutout } from './cutout.js';
-import { pose } from './nibs.js';
 import { runOnboarding } from './onboarding.js';
 import { cropPhoto, downsize, stickerSvg } from './stickers.js';
 import { dayKey, load, loggedDays, save, startFresh, type State, type Sticker } from './store.js';
@@ -426,8 +425,6 @@ function openLog(start?: Category) {
   $('result').hidden = true; $('log-err').hidden = true; $('scan').hidden = true;
   setCat(cat);
   $('log').hidden = false;
-  pose($('log-nibs') as HTMLImageElement, 'wave');
-  setTimeout(() => pose($('log-nibs') as HTMLImageElement, 'idle'), 1200);
   const live = status?.live ?? false;
   $('muse-badge').textContent = live ? 'Muse Spark' : 'Demo';
   $('muse-badge').classList.toggle('demo', !live);
@@ -470,7 +467,6 @@ async function identify() {
   $('log-err').hidden = true;
   $('result').hidden = true;
   $('scan').hidden = false;
-  pose($('log-nibs') as HTMLImageElement, 'look');
   $('scan-text').textContent = status?.live ? 'Muse Spark is looking' : 'Finding it';
   ($('q') as HTMLInputElement).blur();
   try {
@@ -494,7 +490,6 @@ async function identify() {
     showResult();
   } catch (e) {
     showErr(e instanceof Error ? e.message : String(e));
-    pose($('log-nibs') as HTMLImageElement, 'idle');
   } finally {
     $('scan').hidden = true;
   }
@@ -548,7 +543,6 @@ function showResult() {
   const friend = alsoHas(it);
   const verb = it.category === 'book' ? 'is reading this too' : it.category === 'audio' ? 'played this today too' : 'had this today too';
   $('res-note').innerHTML = '';
-  pose($('log-nibs') as HTMLImageElement, 'happy');
   const typed = document.createTextNode('');
   $('res-note').append(typed);
   typeOut(typed, it.note);
@@ -566,9 +560,8 @@ $('stick').addEventListener('click', () => {
   if (!found) return;
   const golden = !$('finish').hidden && ($('finished') as HTMLInputElement).checked;
   const f = found;
-  pose($('log-nibs') as HTMLImageElement, 'love');
-  setTimeout(closeLog, 420);
-  setTimeout(() => stick(f.item, { photo: f.photo, ratio: f.ratio, cutout: f.cutout, artSource: f.artSource, golden, source: photo && f.item.category === 'food' ? 'photo' : 'search', model: f.model }), 540);
+  closeLog();
+  setTimeout(() => stick(f.item, { photo: f.photo, ratio: f.ratio, cutout: f.cutout, artSource: f.artSource, golden, source: photo && f.item.category === 'food' ? 'photo' : 'search', model: f.model }), 120);
 });
 
 // ---------- friends ----------
@@ -641,7 +634,6 @@ function renderTonight() {
   const opened = stage.classList.contains('open') && cardUrl;
   if (opened) return;
   stage.className = 'capsule-stage idle';
-  pose($('night-nibs') as HTMLImageElement, 'sleepy');
   $('share').hidden = true;
   $('actions').hidden = false;
   stage.querySelector('.empty-night')?.remove();
@@ -695,7 +687,6 @@ async function crack() {
   await img.decode().catch(() => undefined);
   stage.className = 'capsule-stage open';
   play('crack');
-  pose($('night-nibs') as HTMLImageElement, 'happy');
   const r = stage.getBoundingClientRect();
   confetti(r.left + r.width / 2, r.top + r.height / 2, 160, 1.6);
   $('tonight-hint').textContent = painting ? 'Painted by Muse Image from your day' : 'Your day, on one card';

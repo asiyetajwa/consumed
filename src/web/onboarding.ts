@@ -1,10 +1,9 @@
 // The first open: a few quick questions, one at a time. Each answer collapses into a ticked line, a ring counts
-// the steps, the line beside it changes with every step, and Nibs reacts to every answer. It ends with a thank
-// you that types itself out.
+// the steps, the line beside it changes with every step, and your friends' faces cheer each answer. It ends
+// with a thank you that types itself out.
 
 import { confetti } from './confetti.js';
 import { FRIENDS } from './friends.js';
-import { nibsHtml, pose } from './nibs.js';
 import { play } from './sound.js';
 
 export interface Answers {
@@ -37,8 +36,7 @@ export function runOnboarding(root: HTMLElement, done: (a: Answers) => void): vo
   root.innerHTML = `
     <div class="ob" role="dialog" aria-modal="true" aria-labelledby="ob-title">
       <div class="ob-sky">
-        <div class="ob-sun"></div>
-        ${nibsHtml('wave', 'ob-nibs')}
+        <div class="ob-faces" id="ob-faces">${FRIENDS.map((f, i) => `<img class="av f${String(i)}" src="avatars/${f.id}.jpg" alt="">`).join('')}<img class="av me" src="avatars/sam.jpg" alt=""></div>
         <div class="ob-pill" id="ob-pill"><img class="av" src="avatars/maya.jpg" alt=""><div><b>Maya</b><span>just logged a book</span></div></div>
         <div class="ob-bubble" id="ob-bubble" hidden>Thank you!</div>
       </div>
@@ -50,7 +48,9 @@ export function runOnboarding(root: HTMLElement, done: (a: Answers) => void): vo
       </div>
     </div>`;
   const $ = (id: string) => root.querySelector<HTMLElement>(`#${id}`)!;
-  const nibs = root.querySelector<HTMLImageElement>('.ob-nibs');
+  const faces = root.querySelector<HTMLElement>('#ob-faces')!;
+  /** The faces in the sky give a little cheer. */
+  const cheer = () => { faces.classList.remove('cheer'); void faces.offsetWidth; faces.classList.add('cheer'); };
   setTimeout(() => $('ob-pill').classList.add('in'), 500);
 
   const value = (k: keyof Answers) => (k === 'circle' ? `${String(a.circle.length)} friends` : k === 'perDay' ? `About ${a.perDay}` : a[k]);
@@ -89,8 +89,7 @@ export function runOnboarding(root: HTMLElement, done: (a: Answers) => void): vo
   function next() {
     step++;
     play('pop', { rate: 1 + step * 0.08 });
-    pose(nibs, step >= STEPS.length ? 'happy' : 'happy');
-    setTimeout(() => pose(nibs, step >= STEPS.length ? 'happy' : 'idle'), 900);
+    cheer();
     render();
   }
 
@@ -99,7 +98,6 @@ export function runOnboarding(root: HTMLElement, done: (a: Answers) => void): vo
     if (k === 'name') {
       const input = root.querySelector<HTMLInputElement>('#ob-name')!;
       setTimeout(() => input.focus(), 350);
-      input.addEventListener('input', () => pose(nibs, input.value ? 'look' : 'wave'));
       root.querySelector('#ob-form')!.addEventListener('submit', (e) => {
         e.preventDefault();
         const v = input.value.trim();
@@ -116,7 +114,7 @@ export function runOnboarding(root: HTMLElement, done: (a: Answers) => void): vo
       }));
     } else if (k === 'perDay') {
       const r = root.querySelector<HTMLInputElement>('#ob-range')!;
-      r.addEventListener('input', () => { a.perDay = PER_DAY[Number(r.value)]!; pose(nibs, Number(r.value) >= 2 ? 'love' : 'look'); play('pop', { volume: 0.3, rate: 1.2 + Number(r.value) * 0.1 }); });
+      r.addEventListener('input', () => { a.perDay = PER_DAY[Number(r.value)]!; play('pop', { volume: 0.3, rate: 1.2 + Number(r.value) * 0.1 }); });
       root.querySelector('#ob-next')!.addEventListener('click', next);
     } else if (k === 'circle') {
       root.querySelectorAll<HTMLButtonElement>('.ob-circle button').forEach((b) => b.addEventListener('click', () => {
@@ -131,10 +129,10 @@ export function runOnboarding(root: HTMLElement, done: (a: Answers) => void): vo
 
   $('ob-finish').addEventListener('click', () => {
     play('chime');
-    pose(nibs, 'love');
+    cheer();
     $('ob-bubble').hidden = false;
     $('ob-pill').classList.remove('in');
-    const r = nibs!.getBoundingClientRect();
+    const r = faces.getBoundingClientRect();
     confetti(r.left + r.width / 2, r.top + r.height / 2, 110, 1.4);
     $('ob-foot').classList.add('gone');
     $('ob-body').innerHTML = `<p class="ob-eyebrow green">All set</p><h2 id="ob-title"></h2><p class="ob-type" id="ob-type"></p><button class="ob-go" id="ob-go">See What Friends Enjoyed Today</button>`;
