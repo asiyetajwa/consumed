@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+*.log
+.consumed-ledger.jsonl
+film/node_modules
+film/out/
+film/public/voiceover/
+film/public/music/
