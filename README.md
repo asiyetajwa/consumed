@@ -87,7 +87,7 @@ For **live mode**, copy `.env.example` to `.env` and set:
 - `CONSUMED_LIVE=1`;
 - a hard cap in `CONSUMED_BUDGET_USD`.
 
-Your log stays in your browser. The friends in the feed are sample friends.
+Your log stays in your browser. The friends in the feed are sample friends, and their profile pictures (in `src/web/avatars/`) are invented people painted with Muse Image by `scripts/make-avatars.ts`.
 
 ## Layout
 

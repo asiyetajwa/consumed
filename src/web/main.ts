@@ -15,9 +15,10 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const app = $('app');
 let state: State = load();
 let status: Status | null = null;
-const VIEWS = ['today', 'friends', 'tonight'] as const;
+// Friends comes first: the app opens on what your friends consumed today.
+const VIEWS = ['friends', 'today', 'tonight'] as const;
 type View = (typeof VIEWS)[number];
-let view: View = 'today';
+let view: View = 'friends';
 
 const today = () => (state.days[dayKey()] ??= []);
 const persist = () => save(state);
@@ -64,6 +65,9 @@ document.addEventListener('click', (e) => {
     }
   });
 }
+
+/** A profile picture: the painted demo portraits live in avatars/. */
+const avatar = (id: string, name: string) => `<img class="av" src="avatars/${id}.jpg" alt="${name}" width="44" height="44">`;
 
 // ---------- today ----------
 // Today is a sticker album page: stickers sit in a two-column grid, all the same size, with a gentle alternating
@@ -191,7 +195,7 @@ function renderDare() {
   const done = today().some((s) => s.category === 'food' && (PURPLE.test(s.colorName) || PURPLE.test(s.title)));
   const el = $('dare');
   el.classList.toggle('done', done);
-  el.innerHTML = `<span class="mark">${done ? '✓' : leo.name[0]!}</span><div><b>${done ? 'Dare done' : `${leo.name}’s dare`}</b><span>${done ? `${leo.name} gets a ping` : 'Something purple today'}</span></div>`;
+  el.innerHTML = `${done ? '<span class="mark">✓</span>' : avatar(leo.id, leo.name)}<div><b>${done ? 'Dare done' : `${leo.name}’s dare`}</b><span>${done ? `${leo.name} gets a ping` : 'Something purple today'}</span></div>`;
   if (done && !state.dareDone[dayKey()]) {
     state.dareDone[dayKey()] = true;
     persist();
@@ -361,7 +365,7 @@ function openDetail(s: Sticker) {
   $('d-credit').textContent = s.source === 'photo' ? 'Your photo' : credit ? `Art: ${credit}` : '';
   $('d-note').textContent = s.note;
   $('d-note').hidden = !s.note;
-  $('d-friends').innerHTML = FRIENDS.map((f) => `<button data-flick="${f.id}" class="${state.flicked.some((x) => x.to === f.id && x.title === s.title) ? 'sent' : ''}"><span class="av" style="background:${f.color}">${f.name[0]!}</span>${f.name}</button>`).join('');
+  $('d-friends').innerHTML = FRIENDS.map((f) => `<button data-flick="${f.id}" class="${state.flicked.some((x) => x.to === f.id && x.title === s.title) ? 'sent' : ''}">${avatar(f.id, f.name)}${f.name}</button>`).join('');
   $('d-remove').textContent = 'Remove';
   $('detail').hidden = false;
 }
@@ -422,7 +426,7 @@ function openLog(start?: Category) {
   $('muse-badge').classList.toggle('demo', !live);
 }
 const closeLog = () => { $('log').hidden = true; };
-$('log-btn').addEventListener('click', () => openLog());
+document.querySelectorAll('.js-log').forEach((b) => b.addEventListener('click', () => openLog()));
 $('log-close').addEventListener('click', closeLog);
 document.querySelector('.seg')!.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-cat]');
@@ -562,14 +566,14 @@ function renderFriends() {
   const top = ms[0];
   if (top) {
     const svg = fitted(top.item, 100);
-    parts.push(`<article class="match pop"><small>A match this week</small><p></p><div class="avs"><span class="av">${state.name[0]!}</span><span class="av" style="background:${top.friend.color}">${top.friend.name[0]!}</span></div><div class="art">${svg}</div></article>`);
+    parts.push(`<article class="match pop"><small>A match this week</small><p></p><div class="avs">${avatar('sam', state.name)}${avatar(top.friend.id, top.friend.name)}</div><div class="art">${svg}</div></article>`);
   }
   for (const f of FRIENDS) {
     const mini = f.items.map((it, i) => `<div style="transform:rotate(${String([-7, 6, -3][i] ?? 0)}deg)">${fitted(it, 82)}</div>`).join('');
     const mine = state.reacted[f.id] ?? [];
     const reacts = REACTIONS.map((r) => `<button data-react="${f.id}" data-emoji="${r}" aria-pressed="${String(mine.includes(r))}" aria-label="React ${r}">${r}<span>${count(f.reactions[r], mine.includes(r))}</span></button>`).join('');
     const flicked = state.flicked.filter((x) => x.to === f.id).at(-1);
-    parts.push(`<article class="friend"><span class="av" style="background:${f.color}">${f.name[0]!}</span><div><div class="name">${f.name}</div><div class="when">${String(f.items.length)} things today · ${f.line}</div></div><div class="mini">${mini}</div>${flicked ? '<div class="flicked"></div>' : ''}<div class="reacts">${reacts}</div></article>`);
+    parts.push(`<article class="friend">${avatar(f.id, f.name)}<div><div class="name">${f.name}</div><div class="when">${String(f.items.length)} things today · ${f.line}</div></div><div class="mini">${mini}</div>${flicked ? '<div class="flicked"></div>' : ''}<div class="reacts">${reacts}</div></article>`);
   }
   const feed = $('feed');
   feed.innerHTML = parts.join('');
@@ -760,7 +764,7 @@ syncSound();
 await loadManifest();
 renderToday();
 const start = location.hash.slice(1);
-go((VIEWS as readonly string[]).includes(start) ? (start as View) : 'today', false);
+go((VIEWS as readonly string[]).includes(start) ? (start as View) : 'friends', false);
 void loadStatus();
 window.addEventListener('hashchange', () => {
   const h = location.hash.slice(1);

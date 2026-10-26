@@ -64,7 +64,7 @@ button:focus-visible, .search input:focus-visible, .sticker:focus-visible, .view
 #sound-btn .off { display: none; }
 #sound-btn[aria-pressed="false"] .on { display: none; }
 #sound-btn[aria-pressed="false"] .off { display: inline; }
-.av { width: 36px; height: 36px; border-radius: 50%; background: var(--sun); display: grid; place-items: center; font-weight: 800; font-size: 15px; color: var(--ink); }
+.av { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: var(--pill); display: block; flex: none; }
 .av.big { width: 52px; height: 52px; font-size: 21px; }
 .pillnav { display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--pill); }
 .pillnav button { height: 36px; padding: 0 13px; border-radius: 999px; font-weight: 700; font-size: 14px; color: var(--ink-2); }
@@ -142,7 +142,8 @@ h1 { font-size: 56px; font-weight: 900; letter-spacing: -2.8px; line-height: .95
 .pillcard span:not(.mark) { display: block; font-size: 12px; color: var(--muted); font-weight: 500; }
 .chain rect.new { animation: link .7s cubic-bezier(.3, .7, .3, 1.4) both; transform-box: fill-box; transform-origin: center; }
 @keyframes link { from { transform: scale(0) rotate(-40deg); } }
-.dare .mark { flex: none; width: 32px; height: 32px; border-radius: 50%; background: #9ccbe8; display: grid; place-items: center; font-weight: 800; font-size: 14px; }
+.dare .av { width: 34px; height: 34px; }
+.dare .mark { flex: none; width: 34px; height: 34px; border-radius: 50%; background: #9ccbe8; display: grid; place-items: center; font-weight: 800; font-size: 14px; }
 .dare.done { background: #eef6e6; }
 .dare.done .mark { background: var(--green-2); color: #fff; }
 /* the dock */

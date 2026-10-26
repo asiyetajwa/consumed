@@ -199,6 +199,11 @@ export class Meta {
 
   /** A photo-style picture of one dish or drink, for food that no public catalog has a photo of. */
   async picture(visual: string): Promise<{ image: string; costUsd: number }> {
+    return this.generate(picturePrompt(visual), 'picture');
+  }
+
+  /** One square Muse Image picture from a prompt, through the spend guard. */
+  async generate(prompt: string, scope: string): Promise<{ image: string; costUsd: number }> {
     const price = PRICES['muse-image-1.0'].perImage;
     const release = this.guard.reserve(price);
     let ok = false;
@@ -206,7 +211,7 @@ export class Meta {
     try {
       const out = await this.post('/images/generations', {
         model: IMAGE_MODEL,
-        prompt: picturePrompt(visual),
+        prompt,
         n: 1,
         size: '1024x1024',
         output_format: 'jpeg',
@@ -221,7 +226,7 @@ export class Meta {
       return { image: `data:image/jpeg;base64,${b64}`, costUsd: price };
     } finally {
       release();
-      this.guard.record({ at: new Date().toISOString(), scope: 'picture', model: IMAGE_MODEL, tokensIn: 0, tokensOut: 0, costUsd: ok ? price : 0, latencyMs: ms, ok });
+      this.guard.record({ at: new Date().toISOString(), scope, model: IMAGE_MODEL, tokensIn: 0, tokensOut: 0, costUsd: ok ? price : 0, latencyMs: ms, ok });
     }
   }
 }
