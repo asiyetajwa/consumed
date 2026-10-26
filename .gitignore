@@ -7,3 +7,5 @@ film/node_modules
 film/out/
 film/public/voiceover/
 film/public/music/
+art/
+.art-cache/

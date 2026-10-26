@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CATALOG, searchCatalog } from '../src/shared/catalog.js';
 import { SHAPES, type Identified } from '../src/shared/types.js';
-import { cardPrompt, cleanItem, Meta } from '../src/server/meta.js';
+import { cardPrompt, cleanItem, Meta, picturePrompt } from '../src/server/meta.js';
 import { BillingError, BudgetError, isBillingError, SpendGuard, tokenCost } from '../src/server/spend.js';
 
 const ok = (json: unknown) => new Response(JSON.stringify(json), { status: 200 });
@@ -91,4 +91,10 @@ test('demo search finds catalog items and never dead-ends', () => {
   assert.ok(plain.title.length > 0);
   for (const c of CATALOG) assert.ok((SHAPES[c.category] as readonly string[]).includes(c.shape), c.title);
   for (const c of CATALOG) assert.ok(!/—/.test(`${c.title}${c.note}${c.detail}`), c.title);
+});
+
+test('the food picture prompt asks for a plain photo with no text or people', () => {
+  const p = picturePrompt('a tall iced purple latte');
+  assert.match(p, /real food photograph of a tall iced purple latte/);
+  assert.match(p, /No text, no logos, no hands, no people/);
 });

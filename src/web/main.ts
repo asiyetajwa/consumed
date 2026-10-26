@@ -6,6 +6,7 @@ import { renderCard, summary } from './card.js';
 import { confetti } from './confetti.js';
 import { alsoHas, FRIENDS, matches, matchLine, REACTIONS } from './friends.js';
 import { isMuted, play, setMuted, soundFor, unlock } from './sound.js';
+import { artFor, catalogArt, fetchArt, loadManifest } from './artwork.js';
 import { cropPhoto, downsize, stickerSvg } from './stickers.js';
 import { dayKey, load, loggedDays, save, startFresh, type State, type Sticker } from './store.js';
 
@@ -84,7 +85,7 @@ function stickerEl(s: Sticker): HTMLElement {
   el.tabIndex = 0;
   el.setAttribute('role', 'button');
   el.setAttribute('aria-label', `${s.title}${s.creator ? `, ${s.creator}` : ''}. Open`);
-  const [svg] = stickerSvg({ shape: s.shape, colors: s.colors, title: s.title, creator: s.creator, photo: s.photo, golden: s.golden }, 0.8);
+  const [svg] = stickerSvg(artFor(s), 0.8);
   el.innerHTML = `<div class="fx">${svg}<span class="cap"></span></div>`;
   el.querySelector('.cap')!.textContent = caption(s);
   place(el, s);
@@ -270,10 +271,12 @@ function stick(item: Identified, extra: Partial<Sticker>) {
 let detailFor: Sticker | null = null;
 function openDetail(s: Sticker) {
   detailFor = s;
-  const [svg] = stickerSvg({ shape: s.shape, colors: s.colors, title: s.title, creator: s.creator, photo: s.photo, golden: s.golden }, 1.05);
+  const [svg] = stickerSvg(artFor(s), 1.05);
   $('d-art').innerHTML = svg;
   $('d-title').textContent = s.title;
   $('d-meta').textContent = [s.creator, s.detail].filter(Boolean).join(' · ');
+  const credit = s.artSource ?? (s.photo ? undefined : catalogArt(s.title)?.source);
+  $('d-credit').textContent = s.source === 'photo' ? 'Your photo' : credit ? `Art: ${credit}` : '';
   $('d-note').textContent = s.note;
   $('d-note').hidden = !s.note;
   $('d-friends').innerHTML = FRIENDS.map((f) => `<button data-flick="${f.id}" class="${state.flicked.some((x) => x.to === f.id && x.title === s.title) ? 'sent' : ''}"><span class="av" style="background:${f.color}">${f.name[0]!}</span>${f.name}</button>`).join('');
@@ -312,7 +315,7 @@ $('d-remove').addEventListener('click', () => {
 // ---------- the log sheet ----------
 let cat: Category = 'audio';
 let photo: string | null = null;
-let found: (IdentifyResponse & { photo?: string }) | null = null;
+let found: (IdentifyResponse & { photo?: string; artSource?: string }) | null = null;
 const PLACEHOLDER: Record<Category, string> = { audio: 'Search a song or audiobook', book: 'Search a book or author', food: 'What did you eat or drink?' };
 const VF_SUB: Record<Category, string> = { audio: 'An album cover or what is playing', book: 'The cover of the book', food: 'Your plate or your cup' };
 const QUICK: Record<Category, string[]> = { audio: ['Espresso', 'Project Hail Mary', 'Birds of a Feather', 'Not Like Us'], book: ['Tomorrow, and Tomorrow, and Tomorrow', 'James', 'Fourth Wing', 'Intermezzo'], food: ['Shakshuka', 'Ube Latte', 'Smash Burger', 'Cold Brew'] };
@@ -379,9 +382,17 @@ async function identify() {
     const body = status ? await askServer(query) : offline(query);
     if (!body.item.found) throw new Error(photo ? 'Muse could not spot a song, book or bite in that one. Try another photo or type it.' : 'Nothing found. Try another way of saying it.');
     found = { ...body };
-    if (photo && body.item.box) {
-      const book = body.item.shape === 'book' || body.item.shape === 'audiobook';
-      found.photo = await cropPhoto(photo, body.item.box, !book);
+    // Your own photo of your plate is the best picture of it. For music and books, the real cover is.
+    if (photo && body.item.category === 'food') found.photo = await cropPhoto(photo, body.item.box, true);
+    else {
+      const known = catalogArt(body.item.title);
+      if (known) found.artSource = known.source;
+      else if (status) {
+        $('scan-text').textContent = body.item.category === 'food' ? 'Finding a picture' : 'Finding the cover';
+        const art = await fetchArt(body.item);
+        if (art) { found.photo = art.photo; found.artSource = art.source; }
+      }
+      if (!found.photo && !known && photo) found.photo = await cropPhoto(photo, body.item.box, body.item.category !== 'book');
     }
     if (body.item.category !== cat) setCat(body.item.category);
     showResult();
@@ -411,7 +422,7 @@ function showResult() {
   const finished = $('finished') as HTMLInputElement;
   finished.checked = false;
   const drawArt = () => {
-    const [svg] = stickerSvg({ shape: it.shape, colors: it.colors, title: it.title, creator: it.creator, photo: found?.photo, golden: finished.checked }, 0.72);
+    const [svg] = stickerSvg(artFor({ ...it, photo: found?.photo, golden: finished.checked }), 0.72);
     $('res-art').innerHTML = svg;
   };
   drawArt();
@@ -419,6 +430,7 @@ function showResult() {
   $('res-eyebrow').innerHTML = found.source === 'muse' ? '<i></i>Muse Spark sees' : '<i></i>Found it';
   $('res-title').textContent = it.title;
   $('res-meta').textContent = [it.creator, it.detail].filter(Boolean).join(' · ');
+  $('res-credit').textContent = found.artSource ? `Art: ${found.artSource}` : '';
   const friend = alsoHas(it);
   const verb = it.category === 'book' ? 'is reading this too' : it.category === 'audio' ? 'played this today too' : 'had this today too';
   $('res-note').innerHTML = '';
@@ -438,7 +450,7 @@ $('stick').addEventListener('click', () => {
   const golden = !$('finish').hidden && ($('finished') as HTMLInputElement).checked;
   const f = found;
   closeLog();
-  setTimeout(() => stick(f.item, { photo: f.photo, golden, source: f.photo ? 'photo' : 'search', model: f.model }), 120);
+  setTimeout(() => stick(f.item, { photo: f.photo, artSource: f.artSource, golden, source: photo && f.item.category === 'food' ? 'photo' : 'search', model: f.model }), 120);
 });
 
 // ---------- friends ----------
@@ -448,11 +460,11 @@ function renderFriends() {
   const parts: string[] = [];
   const top = ms[0];
   if (top) {
-    const [svg] = stickerSvg({ shape: top.item.shape, colors: top.item.colors, title: top.item.title, creator: top.item.creator }, 0.62);
+    const [svg] = stickerSvg(artFor(top.item), 0.62);
     parts.push(`<article class="match pop"><small>A match this week</small><p></p><div class="avs"><span class="av">${state.name[0]!}</span><span class="av" style="background:${top.friend.color}">${top.friend.name[0]!}</span></div><div class="art">${svg}</div></article>`);
   }
   for (const f of FRIENDS) {
-    const mini = f.items.map((it, i) => `<div style="transform:rotate(${String([-7, 6, -3][i] ?? 0)}deg)">${stickerSvg({ shape: it.shape, colors: it.colors, title: it.title, creator: it.creator }, 0.5)[0]}</div>`).join('');
+    const mini = f.items.map((it, i) => `<div style="transform:rotate(${String([-7, 6, -3][i] ?? 0)}deg)">${stickerSvg(artFor(it), 0.5)[0]}</div>`).join('');
     const mine = state.reacted[f.id] ?? [];
     const reacts = REACTIONS.map((r) => `<button data-react="${f.id}" data-emoji="${r}" aria-pressed="${String(mine.includes(r))}" aria-label="React ${r}">${r}<span>${count(f.reactions[r], mine.includes(r))}</span></button>`).join('');
     const flicked = state.flicked.filter((x) => x.to === f.id).at(-1);
@@ -644,6 +656,7 @@ async function loadStatus() {
 
 // ---------- start ----------
 syncSound();
+await loadManifest();
 renderToday();
 const start = location.hash.slice(1);
 go((VIEWS as readonly string[]).includes(start) ? (start as View) : 'today', false);

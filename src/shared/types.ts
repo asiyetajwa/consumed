@@ -71,3 +71,18 @@ export interface Status {
   spentUsd: number;
   budgetUsd: number;
 }
+
+export interface ArtRequest {
+  category: Category;
+  kind: string;
+  title: string;
+  creator: string;
+}
+
+export interface ArtResponse {
+  /** A data URL. */
+  image: string;
+  /** Where the artwork came from, shown as a credit. */
+  source: string;
+  link?: string;
+}

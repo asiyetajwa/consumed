@@ -14,6 +14,7 @@ export interface Sticker extends Identified {
   s: number;
   z: number;
   photo?: string;
+  artSource?: string;
   golden?: boolean;
   source: 'photo' | 'search';
   model?: string;

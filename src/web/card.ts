@@ -1,6 +1,7 @@
 // The Consumed card: one 1080 by 1920 image of the day, sized for Instagram Stories and WhatsApp.
 // With live calls, the middle is Muse Image's painting of the day; without, it is the day's own stickers.
 
+import { artFor, inline } from './artwork.js';
 import { loadImage, stickerSvg } from './stickers.js';
 import type { Sticker } from './store.js';
 
@@ -87,7 +88,8 @@ async function drawStickers(g: CanvasRenderingContext2D, items: Sticker[], x: nu
   const list = items.slice(0, 7);
   const spots = [[0.3, 0.27], [0.72, 0.24], [0.5, 0.52], [0.24, 0.72], [0.74, 0.7], [0.5, 0.86], [0.82, 0.47]];
   for (const [i, it] of list.entries()) {
-    const [svg, sw, sh] = stickerSvg({ shape: it.shape, colors: it.colors, title: it.title, creator: it.creator, photo: it.photo, golden: it.golden }, 2.1);
+    const base = artFor(it);
+    const [svg, sw, sh] = stickerSvg({ ...base, photo: await inline(base.photo) }, 2.1);
     const img = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
     const [fx, fy] = spots[i]!;
     g.save();

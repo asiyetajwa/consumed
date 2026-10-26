@@ -4,7 +4,8 @@
 import express from 'express';
 import { join } from 'node:path';
 import { searchCatalog } from '../shared/catalog.js';
-import type { CardRequest, IdentifyRequest, IdentifyResponse, Status } from '../shared/types.js';
+import type { ArtRequest, ArtResponse, CardRequest, IdentifyRequest, IdentifyResponse, Status } from '../shared/types.js';
+import { findArt } from './art.js';
 import { IMAGE_MODEL, liveReason, Meta, TEXT_MODEL } from './meta.js';
 import { BillingError, BudgetError, SpendGuard } from './spend.js';
 
@@ -15,7 +16,7 @@ const guard = new SpendGuard(budget, process.env.CONSUMED_LEDGER?.trim() || join
 const meta = liveReason() === null ? new Meta(process.env.META_API_KEY!.trim(), guard) : null;
 
 // A small per-visitor allowance, so a public deployment cannot drain the budget.
-const LIMITS = { identify: Number(process.env.CONSUMED_IDENTIFY_PER_HOUR ?? 40), card: Number(process.env.CONSUMED_CARDS_PER_HOUR ?? 4) };
+const LIMITS = { art: 150, picture: Number(process.env.CONSUMED_PICTURES_PER_HOUR ?? 15), identify: Number(process.env.CONSUMED_IDENTIFY_PER_HOUR ?? 40), card: Number(process.env.CONSUMED_CARDS_PER_HOUR ?? 4) };
 const hits = new Map<string, number[]>();
 function allow(kind: keyof typeof LIMITS, ip: string): boolean {
   const key = `${kind}:${ip}`;
@@ -68,6 +69,37 @@ app.post('/api/identify', async (req, res) => {
   } catch (e) {
     fail(res, e);
   }
+});
+
+// Real artwork from public catalogs (free); for food none of them has, Muse Image pictures it in live mode.
+app.post('/api/art', async (req, res) => {
+  const body = req.body as ArtRequest;
+  if (!body || !['audio', 'book', 'food'].includes(body.category) || !String(body.title ?? '').trim()) {
+    res.status(400).json({ error: 'Send a category and a title.' });
+    return;
+  }
+  if (!allow('art', req.ip ?? '')) {
+    res.status(429).json({ error: 'Too many lookups this hour.' });
+    return;
+  }
+  const ask: ArtRequest = { category: body.category, kind: String(body.kind ?? '').slice(0, 20), title: String(body.title).slice(0, 120), creator: String(body.creator ?? '').slice(0, 120) };
+  const art = await findArt(ask);
+  if (art) {
+    res.json(art);
+    return;
+  }
+  const visual = String((body as ArtRequest & { visual?: string }).visual ?? '').slice(0, 120);
+  if (meta && ask.category === 'food' && visual && allow('picture', req.ip ?? '')) {
+    try {
+      const pic = await meta.picture(visual);
+      const out: ArtResponse = { image: pic.image, source: 'Pictured by Muse Image' };
+      res.json(out);
+      return;
+    } catch (e) {
+      console.error(e instanceof Error ? e.message : e);
+    }
+  }
+  res.status(404).json({ error: 'No artwork found.' });
 });
 
 app.post('/api/card', async (req, res) => {

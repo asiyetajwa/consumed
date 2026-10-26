@@ -11,6 +11,16 @@ export interface Art {
   creator: string;
   photo?: string;
   golden?: boolean;
+  /** How a photo is framed: an album sleeve, a square tile, a book cover or a round cut. */
+  frame?: Frame;
+}
+
+export type Frame = 'sleeve' | 'square' | 'cover' | 'round';
+
+export function frameFor(category: string, kind: string): Frame {
+  if (category === 'book') return 'cover';
+  if (category === 'audio') return kind === 'audiobook' || kind === 'podcast' ? 'square' : 'sleeve';
+  return 'round';
 }
 
 let uid = 0;
@@ -62,18 +72,34 @@ export function stickerSvg(a: Art, size = 1): [string, number, number] {
   let w = 150, h = 150, body = '';
 
   if (a.photo) {
-    const book = a.shape === 'book' || a.shape === 'audiobook';
-    if (book) {
-      w = 118; h = 160;
-      body = `<clipPath id="${id}c"><rect x="9" y="9" width="100" height="142" rx="6"/></clipPath>
-        <rect x="2" y="2" width="114" height="156" rx="13" fill="${edge}"/>
-        <image href="${a.photo}" x="9" y="9" width="100" height="142" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id}c)"/>
-        <path d="M95 14 L103 14 L103 146 L95 146" fill="#fff" opacity=".16"/>`;
+    const frame = a.frame ?? (a.shape === 'book' ? 'cover' : 'round');
+    const img = (x: number, y: number, iw: number, ih: number, clip: string) => `<clipPath id="${id}c">${clip}</clipPath><image href="${esc(a.photo!)}" x="${String(x)}" y="${String(y)}" width="${String(iw)}" height="${String(ih)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id}c)"/>`;
+    if (frame === 'cover') {
+      w = 118; h = 168;
+      body = `<rect x="2" y="2" width="114" height="164" rx="12" fill="${edge}"/>
+        ${img(9, 9, 100, 150, '<rect x="9" y="9" width="100" height="150" rx="4"/>')}
+        <rect x="9" y="9" width="7" height="150" fill="#000" opacity=".12"/>
+        <path d="M98 14 L104 14 L104 154 L98 154" fill="#fff" opacity=".16"/>`;
+    } else if (frame === 'sleeve') {
+      w = 186; h = 152;
+      body = `<circle cx="120" cy="76" r="62" fill="${edge}"/>
+        <circle cx="120" cy="76" r="56" fill="#141010"/>
+        ${[48, 40, 32].map((r) => `<circle cx="120" cy="76" r="${String(r)}" fill="none" stroke="#2a2422" stroke-width="1.6"/>`).join('')}
+        <circle cx="120" cy="76" r="17" fill="${c2}"/><circle cx="120" cy="76" r="3" fill="#141010"/>
+        <rect x="2" y="2" width="148" height="148" rx="12" fill="${edge}"/>
+        ${img(9, 9, 134, 134, '<rect x="9" y="9" width="134" height="134" rx="4"/>')}
+        <path d="M18 40 L18 18 L40 18" stroke="#fff" stroke-opacity=".5" stroke-width="5" fill="none" stroke-linecap="round"/>`;
+    } else if (frame === 'square') {
+      w = 156; h = 156;
+      body = `<rect x="2" y="2" width="146" height="146" rx="20" fill="${edge}"/>
+        ${img(9, 9, 132, 132, '<rect x="9" y="9" width="132" height="132" rx="12"/>')}
+        <circle cx="132" cy="132" r="22" fill="${edge}"/><circle cx="132" cy="132" r="17" fill="${c1}"/>
+        <path d="M123 136 v-4 a9 9 0 0 1 18 0 v4" stroke="${inkOn(c1)}" stroke-width="2.6" fill="none"/>
+        <rect x="120" y="133" width="5" height="8" rx="2" fill="${inkOn(c1)}"/><rect x="139" y="133" width="5" height="8" rx="2" fill="${inkOn(c1)}"/>`;
     } else {
       w = 156; h = 156;
-      body = `<clipPath id="${id}c"><circle cx="78" cy="78" r="69"/></clipPath>
-        <circle cx="78" cy="78" r="77" fill="${edge}"/>
-        <image href="${a.photo}" x="9" y="9" width="138" height="138" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id}c)"/>
+      body = `<circle cx="78" cy="78" r="77" fill="${edge}"/>
+        ${img(9, 9, 138, 138, '<circle cx="78" cy="78" r="69"/>')}
         ${gloss('M30 52 A 54 54 0 0 1 72 20')}`;
     }
     return [wrap(id, gold, body, w, h, size), w * size, h * size];

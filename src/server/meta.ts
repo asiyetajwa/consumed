@@ -34,7 +34,7 @@ export const ITEM_SCHEMA = {
     shape: { type: 'string', enum: ALL_SHAPES as unknown as string[] },
     colors: { type: 'array', items: { type: 'string', description: 'Hex color like #e8432e' }, minItems: 3, maxItems: 3 },
     colorName: { type: 'string', description: 'One plain color word for the item as a whole.' },
-    visual: { type: 'string', description: 'Under 14 words describing the object to paint. No titles, names, words or logos.' },
+    visual: { type: 'string', description: 'Under 14 words describing the physical object to paint as a sticker: for music a vinyl record, cassette or headphones in its colors; for audiobooks headphones on a book; for books the book in its cover colors; for food the dish or drink. No titles, names, words or logos.' },
     box: { type: 'array', items: { type: 'integer' }, minItems: 4, maxItems: 4, description: '[x1, y1, x2, y2] of the main subject on a 0 to 1000 grid; [0,0,1000,1000] without a photo.' },
   },
   required: ['found', 'category', 'kind', 'title', 'creator', 'detail', 'note', 'shape', 'colors', 'colorName', 'visual', 'box'],
@@ -146,6 +146,38 @@ export class Meta {
       this.guard.record({ at: new Date().toISOString(), scope: 'card', model: IMAGE_MODEL, tokensIn: 0, tokensOut: 0, costUsd: ok ? price : 0, latencyMs: ms, ok });
     }
   }
+
+  /** A photo-style picture of one dish or drink, for food that no public catalog has a photo of. */
+  async picture(visual: string): Promise<{ image: string; costUsd: number }> {
+    const price = PRICES['muse-image-1.0'].perImage;
+    const release = this.guard.reserve(price);
+    let ok = false;
+    let ms = 0;
+    try {
+      const out = await this.post('/images/generations', {
+        model: IMAGE_MODEL,
+        prompt: picturePrompt(visual),
+        n: 1,
+        size: '1024x1024',
+        output_format: 'jpeg',
+        response_format: 'b64_json',
+        reasoning_strength: 'low',
+        tool_enablement: { enable_web_search: false, enable_shell: false },
+      });
+      ms = out.ms;
+      const b64 = (out.json as { data?: { b64_json?: string }[] }).data?.[0]?.b64_json;
+      if (!b64) throw new Error('Muse Image returned no image.');
+      ok = true;
+      return { image: `data:image/jpeg;base64,${b64}`, costUsd: price };
+    } finally {
+      release();
+      this.guard.record({ at: new Date().toISOString(), scope: 'picture', model: IMAGE_MODEL, tokensIn: 0, tokensOut: 0, costUsd: ok ? price : 0, latencyMs: ms, ok });
+    }
+  }
+}
+
+export function picturePrompt(visual: string): string {
+  return `A real food photograph of ${visual}, seen from above at a slight angle, natural daylight, on a plain light table, centered with the whole dish or cup in frame and some space around it. No text, no logos, no hands, no people.`;
 }
 
 export function cardPrompt(visuals: string[]): string {
