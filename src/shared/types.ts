@@ -32,6 +32,8 @@ export interface Identified {
   colorName: string;
   /** A short visual description, used to paint the day's card. Never a title or a logo. */
   visual: string;
+  /** A short noun phrase for the main object as it looks ("bowl of ramen", "bag of candy"), used to cut it out. */
+  noun: string;
   /** For photos: the main subject, [x1, y1, x2, y2] on a 0 to 1000 grid. */
   box: [number, number, number, number];
 }
@@ -49,6 +51,22 @@ export interface IdentifyResponse {
   model?: string;
   costUsd?: number;
   latencyMs?: number;
+}
+
+export interface CutoutRequest {
+  image: string;
+  width: number;
+  height: number;
+  box: [number, number, number, number];
+  noun: string;
+}
+
+export interface CutoutResponse {
+  /** White where the item is, as a PNG data URL, covering `bounds` in the photo's pixels. */
+  mask: string;
+  bounds: [number, number, number, number];
+  width: number;
+  height: number;
 }
 
 export interface CardRequest {

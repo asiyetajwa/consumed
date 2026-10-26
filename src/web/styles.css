@@ -94,7 +94,7 @@ h1 { font-size: 64px; font-weight: 900; letter-spacing: -3.2px; line-height: .95
   transition: transform .16s; }
 .sticker .fx { display: flex; flex-direction: column; align-items: center; filter: drop-shadow(0 10px 12px rgba(60, 35, 10, .22)) drop-shadow(0 2px 2px rgba(60, 35, 10, .18)); transition: filter .16s; }
 .sticker svg { display: block; pointer-events: none; }
-.sticker .cap { margin-top: 2px; max-width: 168px; text-align: center; font-family: var(--hand); font-size: 19px; line-height: 1; color: var(--ink-2); font-weight: 700; filter: none; pointer-events: none; }
+.sticker .cap { margin-top: 2px; max-width: 150px; text-align: center; font-family: var(--hand); font-size: 19px; line-height: 1; color: var(--ink-2); font-weight: 700; filter: none; pointer-events: none; }
 .sticker.lifted { cursor: grabbing; transition: none; }
 .sticker.lifted .fx { filter: drop-shadow(0 26px 22px rgba(60, 35, 10, .28)) drop-shadow(0 4px 4px rgba(60, 35, 10, .2)); transform: scale(1.06); }
 .sticker.twisting { transition: none; }

@@ -7,6 +7,7 @@ import { confetti } from './confetti.js';
 import { alsoHas, FRIENDS, matches, matchLine, REACTIONS } from './friends.js';
 import { isMuted, play, setMuted, soundFor, unlock } from './sound.js';
 import { artFor, catalogArt, fetchArt, loadManifest } from './artwork.js';
+import { makeCutout, requestCutout } from './cutout.js';
 import { cropPhoto, downsize, stickerSvg } from './stickers.js';
 import { dayKey, load, loggedDays, save, startFresh, type State, type Sticker } from './store.js';
 
@@ -70,7 +71,7 @@ const board = $('board');
 function caption(s: Sticker): string {
   if (s.category === 'food') {
     const h = new Date(s.at).getHours();
-    const when = s.kind === 'drink' ? '' : h < 11 ? ', breakfast' : h < 16 ? ', lunch' : h < 21 ? ', dinner' : ', late';
+    const when = s.kind === 'drink' || s.title.length > 16 ? '' : h < 11 ? ', breakfast' : h < 16 ? ', lunch' : h < 21 ? ', dinner' : ', late';
     return `${s.title.toLowerCase()}${when}`;
   }
   if (s.golden) return `${s.title}, finished!`;
@@ -143,7 +144,7 @@ function freeSpot(): [number, number] {
   let bestD = -1;
   for (let gy = 0; gy < 4; gy++) {
     for (let gx = 0; gx < 3; gx++) {
-      const x = 26 + gx * 24 + (gy % 2 ? 5 : -3), y = 22 + gy * 16;
+      const x = 26 + gx * 24 + (gy % 2 ? 5 : -3), y = 26 + gy * 15;
       const d = taken.length ? Math.min(...taken.map(([tx, ty]) => Math.hypot((tx! - x) * 1.1, ty! - y))) : 100 - Math.hypot(x - 50, y - 40);
       if (d > bestD) { bestD = d; best = [x, y]; }
     }
@@ -315,7 +316,7 @@ $('d-remove').addEventListener('click', () => {
 // ---------- the log sheet ----------
 let cat: Category = 'audio';
 let photo: string | null = null;
-let found: (IdentifyResponse & { photo?: string; artSource?: string }) | null = null;
+let found: (IdentifyResponse & { photo?: string; artSource?: string; ratio?: number; cutout?: boolean }) | null = null;
 const PLACEHOLDER: Record<Category, string> = { audio: 'Search a song or audiobook', book: 'Search a book or author', food: 'What did you eat or drink?' };
 const VF_SUB: Record<Category, string> = { audio: 'An album cover or what is playing', book: 'The cover of the book', food: 'Your plate or your cup' };
 const QUICK: Record<Category, string[]> = { audio: ['Espresso', 'Project Hail Mary', 'Birds of a Feather', 'Not Like Us'], book: ['Tomorrow, and Tomorrow, and Tomorrow', 'James', 'Fourth Wing', 'Intermezzo'], food: ['Shakshuka', 'Ube Latte', 'Smash Burger', 'Cold Brew'] };
@@ -382,8 +383,9 @@ async function identify() {
     const body = status ? await askServer(query) : offline(query);
     if (!body.item.found) throw new Error(photo ? 'Muse could not spot a song, book or bite in that one. Try another photo or type it.' : 'Nothing found. Try another way of saying it.');
     found = { ...body };
-    // Your own photo of your plate is the best picture of it. For music and books, the real cover is.
-    if (photo && body.item.category === 'food') found.photo = await cropPhoto(photo, body.item.box, true);
+    // Your own photo of your plate is the best picture of it, cut out along its outline by SAM 3.1.
+    // For music and books, the real cover is.
+    if (photo && body.item.category === 'food') await cutOut(photo, body.item);
     else {
       const known = catalogArt(body.item.title);
       if (known) found.artSource = known.source;
@@ -392,7 +394,7 @@ async function identify() {
         const art = await fetchArt(body.item);
         if (art) { found.photo = art.photo; found.artSource = art.source; }
       }
-      if (!found.photo && !known && photo) found.photo = await cropPhoto(photo, body.item.box, body.item.category !== 'book');
+      if (!found.photo && !known && photo) await cutOut(photo, body.item);
     }
     if (body.item.category !== cat) setCat(body.item.category);
     showResult();
@@ -401,6 +403,23 @@ async function identify() {
   } finally {
     $('scan').hidden = true;
   }
+}
+
+/** Cuts the item out of the photo with SAM 3.1; without live mode, a round crop. */
+async function cutOut(photo: string, item: Identified) {
+  if (!found) return;
+  if (status?.live) {
+    $('scan-text').textContent = 'Cutting it out';
+    const cut = await requestCutout(photo, item.box, item.noun);
+    if (cut) {
+      const c = await makeCutout(photo, cut);
+      found.photo = c.image;
+      found.ratio = c.ratio;
+      found.cutout = true;
+      return;
+    }
+  }
+  found.photo = await cropPhoto(photo, item.box, item.category !== 'book');
 }
 
 async function askServer(query: string): Promise<IdentifyResponse> {
@@ -422,7 +441,7 @@ function showResult() {
   const finished = $('finished') as HTMLInputElement;
   finished.checked = false;
   const drawArt = () => {
-    const [svg] = stickerSvg(artFor({ ...it, photo: found?.photo, golden: finished.checked }), 0.72);
+    const [svg] = stickerSvg(artFor({ ...it, photo: found?.photo, ratio: found?.ratio, cutout: found?.cutout, golden: finished.checked }), 0.72);
     $('res-art').innerHTML = svg;
   };
   drawArt();
@@ -450,7 +469,7 @@ $('stick').addEventListener('click', () => {
   const golden = !$('finish').hidden && ($('finished') as HTMLInputElement).checked;
   const f = found;
   closeLog();
-  setTimeout(() => stick(f.item, { photo: f.photo, artSource: f.artSource, golden, source: photo && f.item.category === 'food' ? 'photo' : 'search', model: f.model }), 120);
+  setTimeout(() => stick(f.item, { photo: f.photo, ratio: f.ratio, cutout: f.cutout, artSource: f.artSource, golden, source: photo && f.item.category === 'food' ? 'photo' : 'search', model: f.model }), 120);
 });
 
 // ---------- friends ----------

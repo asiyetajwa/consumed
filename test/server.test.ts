@@ -6,7 +6,7 @@ import { cardPrompt, cleanItem, Meta, picturePrompt } from '../src/server/meta.j
 import { BillingError, BudgetError, isBillingError, SpendGuard, tokenCost } from '../src/server/spend.js';
 
 const ok = (json: unknown) => new Response(JSON.stringify(json), { status: 200 });
-const item: Identified = { found: true, category: 'food', kind: 'meal', title: 'Shakshuka', creator: 'North African', detail: 'Eggs in tomato', note: 'Good pick.', shape: 'pan', colors: ['#c6341f', '#fffaf0', '#f6b52a'], colorName: 'red', visual: 'a pan of shakshuka', box: [100, 120, 900, 880] };
+const item: Identified = { found: true, category: 'food', kind: 'meal', title: 'Shakshuka', creator: 'North African', detail: 'Eggs in tomato', note: 'Good pick.', shape: 'pan', colors: ['#c6341f', '#fffaf0', '#f6b52a'], colorName: 'red', noun: 'pan of shakshuka', visual: 'a pan of shakshuka', box: [100, 120, 900, 880] };
 
 test('spend guard reserves the worst case and refuses past the budget', () => {
   const g = new SpendGuard(0.01, null);
@@ -97,4 +97,17 @@ test('the food picture prompt asks for a plain photo with no text or people', ()
   const p = picturePrompt('a tall iced purple latte');
   assert.match(p, /real food photograph of a tall iced purple latte/);
   assert.match(p, /No text, no logos, no hands, no people/);
+});
+
+test('solidify fills a bowl whose rim has a small gap', async () => {
+  const { solidify } = await import('../src/server/meta.js');
+  const W = 40, H = 40;
+  const ring = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const d = Math.hypot(x - 20, y - 20);
+    if (d > 14 && d < 17 && !(y < 8 && x > 18 && x < 22)) ring[y * W + x] = 1; // a ring with a 3 px gap at the top
+  }
+  const out = solidify(ring, W, H);
+  assert.equal(out[20 * W + 20], 1, 'the middle is filled');
+  assert.equal(out[1 * W + 1], 0, 'the corner stays empty');
 });

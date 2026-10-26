@@ -4,12 +4,15 @@
 //   card:     Muse Image paints the day's items as one illustration for the Consumed card.
 // Both go through the spend guard. Nothing is called unless CONSUMED_LIVE=1 and a budget is set.
 
-import { ALL_SHAPES, SHAPES, type CardRequest, type CardResponse, type IdentifyRequest, type Identified } from '../shared/types.js';
+import { decodeMaskToRaster, parseImageStream, recordsOfKind } from '@meta-sam/parser';
+import { ALL_SHAPES, SHAPES, type CardRequest, type CutoutResponse, type CardResponse, type IdentifyRequest, type Identified } from '../shared/types.js';
+import { grayPng } from './png.js';
 import { BillingError, isBillingError, PRICES, SpendGuard, tokenCost } from './spend.js';
 
 const BASE = (process.env.META_BASE_URL?.trim() || 'https://api.meta.ai/v1').replace(/\/$/, '');
 export const TEXT_MODEL = process.env.CONSUMED_TEXT_MODEL?.trim() || 'muse-spark-1.3';
 export const IMAGE_MODEL = process.env.CONSUMED_IMAGE_MODEL?.trim() || 'muse-image-1.0';
+export const SAM_MODEL = 'sam-3.1';
 const MAX_OUT = 1500;
 const TIMEOUT_MS = Number(process.env.CONSUMED_TIMEOUT_MS ?? 90_000);
 
@@ -34,10 +37,11 @@ export const ITEM_SCHEMA = {
     shape: { type: 'string', enum: ALL_SHAPES as unknown as string[] },
     colors: { type: 'array', items: { type: 'string', description: 'Hex color like #e8432e' }, minItems: 3, maxItems: 3 },
     colorName: { type: 'string', description: 'One plain color word for the item as a whole.' },
+    noun: { type: 'string', description: '1 to 4 words naming the main object as it looks in the photo, for cutting it out: "bowl of ramen", "bag of candy", "tray of fries", "book", "phone". For a search, the object you would picture.' },
     visual: { type: 'string', description: 'Under 14 words describing the physical object to paint as a sticker: for music a vinyl record, cassette or headphones in its colors; for audiobooks headphones on a book; for books the book in its cover colors; for food the dish or drink. No titles, names, words or logos.' },
     box: { type: 'array', items: { type: 'integer' }, minItems: 4, maxItems: 4, description: '[x1, y1, x2, y2] of the main subject on a 0 to 1000 grid; [0,0,1000,1000] without a photo.' },
   },
-  required: ['found', 'category', 'kind', 'title', 'creator', 'detail', 'note', 'shape', 'colors', 'colorName', 'visual', 'box'],
+  required: ['found', 'category', 'kind', 'title', 'creator', 'detail', 'note', 'shape', 'colors', 'colorName', 'noun', 'visual', 'box'],
 } as const;
 
 const SYSTEM = `You are the eyes of Consumed, a daily log of what someone listened to, read and ate.
@@ -147,6 +151,52 @@ export class Meta {
     }
   }
 
+  /**
+   * SAM 3.1 cuts the item out of the photo along its own outline. The prompt is the box Muse Spark found, in the
+   * photo's pixels; the answer is the object's mask, sent to the browser as a small black and white PNG.
+   */
+  async segment(image: string, width: number, height: number, box: [number, number, number, number], noun?: string): Promise<Cutout | null> {
+    const price = PRICES['sam-3.1'].perImage;
+    const release = this.guard.reserve(price);
+    let ok = false;
+    let ms = 0;
+    try {
+      const px = (v: number, max: number) => Math.max(0, Math.min(max - 1, Math.round((v / 1000) * max)));
+      const prompt = noun?.trim() ? noun.trim().slice(0, 60) : `<0f>1<|box;x1=${String(px(box[0], width))};y1=${String(px(box[1], height))};x2=${String(px(box[2], width))};y2=${String(px(box[3], height))};w=${String(width)};h=${String(height)}|>`;
+      const t0 = Date.now();
+      const res = await this.fetchImpl(`${BASE}/responses`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${this.key}`, 'content-type': 'application/json', accept: 'text/event-stream' },
+        body: JSON.stringify({ model: SAM_MODEL, stream: true, metadata: { mask_encoding: 'one_bit' }, input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: prompt }, { type: 'input_image', image_url: image }] }] }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      const text = await res.text();
+      ms = Date.now() - t0;
+      if (!res.ok) {
+        if (isBillingError(res.status, text)) {
+          this.guard.halt(`HTTP ${String(res.status)} from /responses`);
+          throw new BillingError(`The Meta Model API refused for billing (HTTP ${String(res.status)}). All calls are halted.`);
+        }
+        throw new Error(`SAM 3.1 returned HTTP ${String(res.status)}: ${text.slice(0, 300)}`);
+      }
+      ok = true;
+      const events = text.split('\n').filter((l) => l.startsWith('data: ') && l !== 'data: [DONE]').map((l) => JSON.parse(l.slice(6)) as { type: string });
+      const parsed = parseImageStream((async function* () { yield* events; })());
+      const result = await parsed.finalResult;
+      // A noun can match several things; keep the biggest, which is the item the photo is of.
+      const mask = [...recordsOfKind(result.records, 'mask')].sort((p, q) => area(q.bounds) - area(p.bounds))[0];
+      if (!mask) return null;
+      const raster = solidify(decodeMaskToRaster(mask.mask), mask.mask.width, mask.mask.height);
+      const gray = raster.map((v) => (v ? 255 : 0));
+      if (!gray.some(Boolean)) return null;
+      const png = grayPng(gray, mask.mask.width, mask.mask.height);
+      return { mask: `data:image/png;base64,${png.toString('base64')}`, bounds: [mask.bounds.left, mask.bounds.top, mask.bounds.right, mask.bounds.bottom], width, height };
+    } finally {
+      release();
+      this.guard.record({ at: new Date().toISOString(), scope: 'cutout', model: SAM_MODEL, tokensIn: 0, tokensOut: 0, costUsd: ok ? price : 0, latencyMs: ms, ok });
+    }
+  }
+
   /** A photo-style picture of one dish or drink, for food that no public catalog has a photo of. */
   async picture(visual: string): Promise<{ image: string; costUsd: number }> {
     const price = PRICES['muse-image-1.0'].perImage;
@@ -187,6 +237,66 @@ ${list}
 Leave the top fifth of the picture as empty cream paper. No text, no letters, no numbers, no logos, no people.`;
 }
 
+/**
+ * Fills enclosed gaps in a mask, so a bowl keeps its soup and a plate its food: any empty pixel that cannot reach
+ * the edge of the mask through other empty pixels is part of the item.
+ */
+export function fillHoles(raster: Uint8Array, width: number, height: number): Uint8Array {
+  const outside = new Uint8Array(raster.length);
+  const queue: number[] = [];
+  const push = (i: number) => {
+    if (!raster[i] && !outside[i]) { outside[i] = 1; queue.push(i); }
+  };
+  for (let x = 0; x < width; x++) { push(x); push((height - 1) * width + x); }
+  for (let y = 0; y < height; y++) { push(y * width); push(y * width + width - 1); }
+  while (queue.length) {
+    const i = queue.pop()!;
+    const x = i % width;
+    if (x > 0) push(i - 1);
+    if (x < width - 1) push(i + 1);
+    if (i >= width) push(i - width);
+    if (i < raster.length - width) push(i + width);
+  }
+  return raster.map((v, i) => (v || !outside[i] ? 1 : 0));
+}
+
+/** Max (dilate) or min (erode) over a square of side 2r+1, done as two one-dimensional passes. */
+function morph(src: Uint8Array, width: number, height: number, r: number, dilate: boolean): Uint8Array {
+  const pass = (input: Uint8Array, horizontal: boolean) => {
+    const out = new Uint8Array(input.length);
+    const [n, m] = horizontal ? [height, width] : [width, height];
+    for (let line = 0; line < n; line++) {
+      const at = (k: number) => (horizontal ? line * width + k : k * width + line);
+      // A running count of set pixels inside the window.
+      let count = 0;
+      for (let k = 0; k < Math.min(r, m); k++) count += input[at(k)]!;
+      for (let k = 0; k < m; k++) {
+        if (k + r < m) count += input[at(k + r)]!;
+        if (k - r - 1 >= 0) count -= input[at(k - r - 1)]!;
+        const span = Math.min(m - 1, k + r) - Math.max(0, k - r) + 1;
+        out[at(k)] = dilate ? (count > 0 ? 1 : 0) : count === span ? 1 : 0;
+      }
+    }
+    return out;
+  };
+  return pass(pass(src, true), false);
+}
+
+/**
+ * Makes a mask solid: closes small gaps in a rim (grow, fill, shrink back), then fills what the rim encloses,
+ * so a glass keeps its latte and a pan its shakshuka.
+ */
+export function solidify(raster: Uint8Array, width: number, height: number): Uint8Array {
+  const r = Math.max(2, Math.round(Math.max(width, height) * 0.03));
+  const closed = morph(fillHoles(morph(raster, width, height, r, true), width, height), width, height, r, false);
+  return fillHoles(raster.map((v, i) => v | closed[i]!), width, height);
+}
+
+const area = (b: { left: number; top: number; right: number; bottom: number }) => (b.right - b.left) * (b.bottom - b.top);
+
+/** A cut-out: the item's mask, and where the mask sits in the photo (pixels). */
+export type Cutout = CutoutResponse;
+
 const HEX = /^#[0-9a-f]{6}$/i;
 
 /** Keeps the model's answer inside what the stickers can draw. */
@@ -210,6 +320,7 @@ export function cleanItem(raw: Identified, fallback: IdentifyRequest['category']
     shape,
     colors: [colors[0]!, colors[1]!, colors[2]!],
     colorName: strip(raw.colorName, 20).toLowerCase(),
+    noun: strip(raw.noun, 40).toLowerCase(),
     visual: strip(raw.visual, 120),
     box: [box[0]!, box[1]!, box[2]!, box[3]!],
   };

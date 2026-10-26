@@ -8,6 +8,7 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 export const PRICES = {
   'muse-spark-1.3': { inPerM: 1.25, outPerM: 4.25 },
   'muse-image-1.0': { perImage: 0.01 },
+  'sam-3.1': { perImage: 0.0025 },
 } as const;
 
 export class BudgetError extends Error {}

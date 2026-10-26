@@ -5,7 +5,14 @@
 import type { ArtResponse, Identified } from '../shared/types.js';
 import { frameFor, loadImage, type Art } from './stickers.js';
 
-let manifest: Record<string, { file: string; source: string }> = {};
+export interface CatalogArt {
+  file: string;
+  source: string;
+  /** Set when the file is a SAM cut-out (a PNG with transparency). */
+  ratio?: number;
+}
+
+let manifest: Record<string, CatalogArt> = {};
 const key = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '');
 
 export async function loadManifest(): Promise<void> {
@@ -17,16 +24,19 @@ export async function loadManifest(): Promise<void> {
   }
 }
 
-export function catalogArt(title: string): { file: string; source: string } | undefined {
+export function catalogArt(title: string): CatalogArt | undefined {
   return manifest[key(title)];
 }
 
-type Drawable = Pick<Identified, 'shape' | 'colors' | 'title' | 'creator' | 'category' | 'kind'> & { photo?: string; golden?: boolean };
+type Drawable = Pick<Identified, 'shape' | 'colors' | 'title' | 'creator' | 'category' | 'kind'> & { photo?: string; golden?: boolean; ratio?: number; cutout?: boolean };
 
 /** What to draw for an item: its own photo or artwork when it has one, the catalog file otherwise. */
 export function artFor(it: Drawable, override?: Partial<Art>): Art {
-  const photo = it.photo ?? catalogArt(it.title)?.file;
-  return { shape: it.shape, colors: it.colors, title: it.title, creator: it.creator, photo, golden: it.golden, frame: frameFor(it.category, it.kind), ...override };
+  if (it.photo) {
+    return { shape: it.shape, colors: it.colors, title: it.title, creator: it.creator, photo: it.photo, golden: it.golden, frame: it.cutout ? 'cutout' : frameFor(it.category, it.kind), ratio: it.ratio, ...override };
+  }
+  const known = catalogArt(it.title);
+  return { shape: it.shape, colors: it.colors, title: it.title, creator: it.creator, photo: known?.file, golden: it.golden, frame: known?.ratio ? 'cutout' : frameFor(it.category, it.kind), ratio: known?.ratio, ...override };
 }
 
 /** Asks the server for artwork; returns a small JPEG data URL and its source, or null. */

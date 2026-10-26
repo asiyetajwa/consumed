@@ -1,7 +1,7 @@
 // The person's log, kept in this browser. Days are keyed by local date. A first visit starts with eleven earlier
 // days of sample stickers so the paper chain has something to show; "Start Fresh" clears them.
 
-import { CATALOG } from '../shared/catalog.js';
+import { CATALOG, nounFor } from '../shared/catalog.js';
 import type { Identified } from '../shared/types.js';
 
 export interface Sticker extends Identified {
@@ -14,6 +14,9 @@ export interface Sticker extends Identified {
   s: number;
   z: number;
   photo?: string;
+  /** Width over height, for cut-outs. */
+  ratio?: number;
+  cutout?: boolean;
   artSource?: string;
   golden?: boolean;
   source: 'photo' | 'search';
@@ -49,7 +52,7 @@ function sampleDays(): Record<string, Sticker[]> {
     const n = 1 + (back % 3);
     days[dayKey(d)] = Array.from({ length: n }, (_, i) => {
       const { words: _w, ...c } = pool[(back * 3 + i * 5) % pool.length]!;
-      return { ...c, found: true, box: [0, 0, 1000, 1000] as [number, number, number, number], id: `sample-${String(back)}-${String(i)}`, at: d.toISOString(), x: 28 + i * 24, y: 40 + (i % 2) * 22, r: (i % 2 ? 6 : -5), s: 1, z: i, source: 'search' as const };
+      return { ...c, noun: nounFor(c.shape), found: true, box: [0, 0, 1000, 1000] as [number, number, number, number], id: `sample-${String(back)}-${String(i)}`, at: d.toISOString(), x: 28 + i * 24, y: 40 + (i % 2) * 22, r: (i % 2 ? 6 : -5), s: 1, z: i, source: 'search' as const };
     });
   }
   return days;

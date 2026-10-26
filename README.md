@@ -11,6 +11,7 @@ Built for the Meta Global AI Developer Hackathon (Startup track, theme "Build fo
 | Model | Where | What it does |
 |---|---|---|
 | **Muse Spark** (`muse-spark-1.3`) | Logging | Reads a photo (an album, a book cover, a plate) or a search, and returns the item as JSON through structured output: the real title and creator, a short line of facts, one warm note, the sticker shape and three colors from the photo, a color word for dares, and the box around the main subject so the photo itself becomes a die-cut sticker. Reasoning effort is set to low to keep each log fast and cheap. |
+| **SAM 3.1** (`sam-3.1`) | Logging | Cuts the item out of your photo along its own outline. Muse Spark names the object ("bowl of pho", "bag of candy") and SAM 3.1 returns its mask. The app closes small gaps in a rim and fills what it encloses, so a bowl keeps its soup. The sticker is the cut-out with a thin white die-cut edge. |
 | **Muse Image** (`muse-image-1.0`) | Tonight, and food pictures | Pictures a dish or drink no public catalog has a photo of. Paints the day's items as one illustration for the Consumed card, from short visual descriptions Muse Spark wrote at log time. Web search, image search and the shell tool are turned off, and the prompt asks for no text or logos. |
 
 ## Real artwork
@@ -19,7 +20,8 @@ Stickers show the real thing whenever there is a picture of it:
 - **Music, podcasts and audiobooks:** cover art from the Apple iTunes Search API (Apple Music, Apple Podcasts, Apple Books).
 - **Books:** covers from Open Library.
 - **Dishes:** photos from TheMealDB.
-- **Your own photos:** for food, your photo of your plate is the sticker, cut out round from the box Muse Spark found.
+- **Your own photos:** for food, your photo is the sticker, cut out along the item's outline by SAM 3.1.
+- **Demo food photos** are cut out the same way by `npm run fetch-art`.
 
 When none of those has a picture of a dish or drink, Muse Image pictures it in live mode. The demo food photos in `demo-art/` were made this way, and the app labels them as made with Muse Image.
 
@@ -31,10 +33,11 @@ Measured on October 26, 2026:
 |---|---|---|---|
 | Identify a search | Muse Spark | 2 to 4 s | about $0.004 |
 | Identify a photo | Muse Spark | about 3 s | about $0.0045 |
+| Cut out a photo | SAM 3.1 | about 1 s | $0.0025 |
 | Picture a dish | Muse Image | about 9 s | $0.01 |
 | Paint the day's card | Muse Image | about 11 s | $0.01 |
 
-A day with four logs and one card costs about $0.03.
+A day with four logs (two of them photos) and one card costs about $0.04.
 
 Every call goes through a spend guard (`src/server/spend.ts`):
 - it reserves the call's worst case before sending, at the published prices;

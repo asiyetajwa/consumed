@@ -1,7 +1,7 @@
 // Seeded demo friends and their days. Matches are computed against your log: the same book, song or album
 // as a friend this week becomes a match card in the feed.
 
-import { CATALOG } from '../shared/catalog.js';
+import { CATALOG, nounFor } from '../shared/catalog.js';
 import type { Identified } from '../shared/types.js';
 import { normTitle, type State, type Sticker } from './store.js';
 
@@ -20,7 +20,7 @@ const pick = (title: string): Identified => {
   const c = CATALOG.find((x) => x.title === title);
   if (!c) throw new Error(`Missing catalog item ${title}`);
   const { words: _w, ...rest } = c;
-  return { ...rest, found: true, box: [0, 0, 1000, 1000] };
+  return { ...rest, noun: nounFor(rest.shape), found: true, box: [0, 0, 1000, 1000] };
 };
 
 export const FRIENDS: Friend[] = [

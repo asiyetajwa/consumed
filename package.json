@@ -15,6 +15,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@meta-sam/parser": "^0.1.0",
     "express": "^5.3.0"
   },
   "devDependencies": {

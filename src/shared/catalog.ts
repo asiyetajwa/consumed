@@ -3,7 +3,7 @@
 
 import { SHAPES, type Category, type Identified, type Shape } from './types.js';
 
-type Entry = Omit<Identified, 'found' | 'box'> & { words?: string };
+type Entry = Omit<Identified, 'found' | 'box' | 'noun'> & { words?: string };
 
 const e = (category: Category, kind: string, title: string, creator: string, detail: string, note: string, shape: Shape, colors: [string, string, string], colorName: string, visual: string, words = ''): Entry =>
   ({ category, kind, title, creator, detail, note, shape, colors, colorName, visual, words });
@@ -64,7 +64,7 @@ export function searchCatalog(query: string, category: Category): Identified {
   }
   if (best && bestScore >= 2) {
     const { words: _w, ...item } = best;
-    return { ...item, found: true, box: [0, 0, 1000, 1000] };
+    return { ...item, noun: nounFor(item.shape, item.title), found: true, box: [0, 0, 1000, 1000] };
   }
   return plainItem(query, category);
 }
@@ -85,7 +85,15 @@ export function plainItem(query: string, category: Category): Identified {
     shape,
     colors: category === 'audio' ? ['#1b1716', '#f6b52a', '#fcf9ec'] : category === 'book' ? ['#2f6b2a', '#f4efdc', '#e8432e'] : ['#fcf9ec', '#e8432e', '#f6b52a'],
     colorName: '',
+    noun: nounFor(shape, title),
     visual: category === 'audio' ? 'a black vinyl record with a yellow label' : category === 'book' ? 'a green hardcover book' : 'a colorful plate of food',
     box: [0, 0, 1000, 1000],
   };
+}
+
+/** What SAM is asked to cut out of a catalog photo, from the sticker shape. */
+export function nounFor(shape: Shape, title = ''): string {
+  const t = title.toLowerCase();
+  const nouns: Record<Shape, string> = { vinyl: 'album cover', cassette: 'album cover', headphones: 'cover', audiobook: 'cover', book: 'book', bowl: `bowl of ${t || 'food'}`, plate: `plate of ${t || 'food'}`, pan: `pan of ${t || 'food'}`, cup: `glass of ${t || 'drink'}`, mug: `cup of ${t || 'coffee'}`, burger: 'burger', pizza: 'pizza slice', fruit: 'bunch of grapes', donut: 'donut' };
+  return nouns[shape];
 }

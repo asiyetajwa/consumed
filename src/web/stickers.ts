@@ -13,9 +13,11 @@ export interface Art {
   golden?: boolean;
   /** How a photo is framed: an album sleeve, a square tile, a book cover or a round cut. */
   frame?: Frame;
+  /** Width over height of a cut-out. */
+  ratio?: number;
 }
 
-export type Frame = 'sleeve' | 'square' | 'cover' | 'round';
+export type Frame = 'sleeve' | 'square' | 'cover' | 'round' | 'cutout';
 
 export function frameFor(category: string, kind: string): Frame {
   if (category === 'book') return 'cover';
@@ -74,6 +76,17 @@ export function stickerSvg(a: Art, size = 1): [string, number, number] {
   if (a.photo) {
     const frame = a.frame ?? (a.shape === 'book' ? 'cover' : 'round');
     const img = (x: number, y: number, iw: number, ih: number, clip: string) => `<clipPath id="${id}c">${clip}</clipPath><image href="${esc(a.photo!)}" x="${String(x)}" y="${String(y)}" width="${String(iw)}" height="${String(ih)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id}c)"/>`;
+    if (frame === 'cutout') {
+      // The item's own outline, with a white die-cut edge grown from its alpha.
+      const r = a.ratio ?? 1;
+      w = r >= 1 ? 156 : Math.round(156 * r);
+      h = r >= 1 ? Math.round(156 / r) : 156;
+      const pad = 6;
+      const edgeColor = a.golden ? '#e2b23a' : '#ffffff';
+      const defs = `${gold}<filter id="${id}e" x="-10%" y="-10%" width="120%" height="120%"><feMorphology in="SourceAlpha" operator="dilate" radius="3.2" result="d"/><feGaussianBlur in="d" stdDeviation=".5" result="s"/><feFlood flood-color="${edgeColor}"/><feComposite in2="s" operator="in" result="edge"/><feMerge><feMergeNode in="edge"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+      body = `<image href="${esc(a.photo)}" x="${String(pad)}" y="${String(pad)}" width="${String(w - pad * 2)}" height="${String(h - pad * 2)}" preserveAspectRatio="xMidYMid meet" filter="url(#${id}e)"/>`;
+      return [wrap(id, defs, body, w, h, size), w * size, h * size];
+    }
     if (frame === 'cover') {
       w = 118; h = 168;
       body = `<rect x="2" y="2" width="114" height="164" rx="12" fill="${edge}"/>

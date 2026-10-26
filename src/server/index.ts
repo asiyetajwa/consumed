@@ -4,7 +4,7 @@
 import express from 'express';
 import { join } from 'node:path';
 import { searchCatalog } from '../shared/catalog.js';
-import type { ArtRequest, ArtResponse, CardRequest, IdentifyRequest, IdentifyResponse, Status } from '../shared/types.js';
+import type { ArtRequest, ArtResponse, CardRequest, CutoutRequest, IdentifyRequest, IdentifyResponse, Status } from '../shared/types.js';
 import { findArt } from './art.js';
 import { IMAGE_MODEL, liveReason, Meta, TEXT_MODEL } from './meta.js';
 import { BillingError, BudgetError, SpendGuard } from './spend.js';
@@ -16,7 +16,7 @@ const guard = new SpendGuard(budget, process.env.CONSUMED_LEDGER?.trim() || join
 const meta = liveReason() === null ? new Meta(process.env.META_API_KEY!.trim(), guard) : null;
 
 // A small per-visitor allowance, so a public deployment cannot drain the budget.
-const LIMITS = { art: 150, picture: Number(process.env.CONSUMED_PICTURES_PER_HOUR ?? 15), identify: Number(process.env.CONSUMED_IDENTIFY_PER_HOUR ?? 40), card: Number(process.env.CONSUMED_CARDS_PER_HOUR ?? 4) };
+const LIMITS = { cutout: Number(process.env.CONSUMED_CUTOUTS_PER_HOUR ?? 40), art: 150, picture: Number(process.env.CONSUMED_PICTURES_PER_HOUR ?? 15), identify: Number(process.env.CONSUMED_IDENTIFY_PER_HOUR ?? 40), card: Number(process.env.CONSUMED_CARDS_PER_HOUR ?? 4) };
 const hits = new Map<string, number[]>();
 function allow(kind: keyof typeof LIMITS, ip: string): boolean {
   const key = `${kind}:${ip}`;
@@ -100,6 +100,36 @@ app.post('/api/art', async (req, res) => {
     }
   }
   res.status(404).json({ error: 'No artwork found.' });
+});
+
+// SAM 3.1 cuts the item out of your photo along its outline.
+app.post('/api/cutout', async (req, res) => {
+  const body = req.body as CutoutRequest;
+  if (!meta) {
+    res.status(409).json({ error: 'Cut-outs need live mode.' });
+    return;
+  }
+  const okBox = Array.isArray(body?.box) && body.box.length === 4 && body.box.every((n) => Number.isFinite(n));
+  if (!body || typeof body.image !== 'string' || !body.image.startsWith('data:image/') || body.image.length > 3_000_000 || !okBox || !(body.width > 0 && body.height > 0 && body.width <= 4096 && body.height <= 4096)) {
+    res.status(400).json({ error: 'Send a photo, its size and a box.' });
+    return;
+  }
+  if (!allow('cutout', req.ip ?? '')) {
+    res.status(429).json({ error: 'Too many cut-outs this hour.' });
+    return;
+  }
+  try {
+    const box = body.box.map((n) => Math.max(0, Math.min(1000, Math.round(n)))) as CutoutRequest['box'];
+    const noun = String(body.noun ?? '').replace(/[<>|]/g, '').slice(0, 60);
+    const cut = (noun ? await meta.segment(body.image, Math.round(body.width), Math.round(body.height), box, noun) : null) ?? (await meta.segment(body.image, Math.round(body.width), Math.round(body.height), box));
+    if (!cut) {
+      res.status(404).json({ error: 'Nothing to cut out.' });
+      return;
+    }
+    res.json(cut);
+  } catch (e) {
+    fail(res, e);
+  }
 });
 
 app.post('/api/card', async (req, res) => {
