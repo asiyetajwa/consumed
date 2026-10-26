@@ -66,17 +66,31 @@ document.addEventListener('click', (e) => {
 }
 
 // ---------- today ----------
+// Today is a sticker album page: stickers sit in a two-column grid, all the same size, with a gentle alternating
+// tilt and a two-line caption. Drag one and it comes loose to sit anywhere; Tidy Up puts everything back.
 const board = $('board');
+const page = $('page');
+const COLS = 2;
+const CELL_H = 184;
+const ART = 108;
 
-function caption(s: Sticker): string {
+function captionLines(s: Sticker): [string, string] {
   if (s.category === 'food') {
-    const h = new Date(s.at).getHours();
-    const when = s.kind === 'drink' || s.title.length > 16 ? '' : h < 11 ? ', breakfast' : h < 16 ? ', lunch' : h < 21 ? ', dinner' : ', late';
-    return `${s.title.toLowerCase()}${when}`;
+    const d = new Date(s.at);
+    const h = d.getHours();
+    const meal = s.kind === 'drink' ? 'Drink' : s.kind === 'snack' || s.kind === 'dessert' ? 'Snack' : h < 11 ? 'Breakfast' : h < 16 ? 'Lunch' : h < 21 ? 'Dinner' : 'Late';
+    return [s.title, `${meal} · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`];
   }
-  if (s.golden) return `${s.title}, finished!`;
-  if (s.category === 'audio' && s.creator) return `${s.title}, ${s.creator.split(',')[0] ?? ''}`;
-  return s.title;
+  const by = (s.creator.split(/,| read by /)[0] ?? '').trim();
+  if (s.golden) return [s.title, `Finished · ${by}`];
+  return [s.title, by || (s.category === 'book' ? 'Book' : 'Listening')];
+}
+
+/** The sticker drawn to fit a square of `box` pixels, whatever its shape. */
+function fitted(s: Parameters<typeof artFor>[0], box: number): string {
+  const art = artFor(s);
+  const [, w, h] = stickerSvg(art, 1);
+  return stickerSvg(art, box / Math.max(w, h))[0];
 }
 
 function stickerEl(s: Sticker): HTMLElement {
@@ -86,39 +100,89 @@ function stickerEl(s: Sticker): HTMLElement {
   el.tabIndex = 0;
   el.setAttribute('role', 'button');
   el.setAttribute('aria-label', `${s.title}${s.creator ? `, ${s.creator}` : ''}. Open`);
-  const [svg] = stickerSvg(artFor(s), 0.8);
-  el.innerHTML = `<div class="fx">${svg}<span class="cap"></span></div>`;
-  el.querySelector('.cap')!.textContent = caption(s);
-  place(el, s);
+  const [t, sub] = captionLines(s);
+  el.innerHTML = `<div class="fx"><div class="art"><div class="rot">${fitted(s, ART)}</div></div><div class="cap"><b></b><span></span></div></div>`;
+  el.querySelector('.cap b')!.textContent = t;
+  el.querySelector('.cap span')!.textContent = sub;
   wire(el, s);
   return el;
 }
 
+/** Where a tidy sticker sits: the centre of its art, in pixels on the sheet. */
+function slot(i: number): [number, number, number] {
+  const w = board.clientWidth || 360;
+  const col = i % COLS, row = Math.floor(i / COLS);
+  const tilt = [-3, 2.5, 2, -2.5][i % 4]!;
+  return [(w / COLS) * (col + 0.5), row * CELL_H + 14 + ART / 2, tilt];
+}
+
 function place(el: HTMLElement, s: Sticker) {
-  el.style.left = `${String(s.x)}%`;
-  el.style.top = `${String(s.y)}%`;
-  el.style.zIndex = String(s.z);
-  el.style.setProperty('--r', String(s.r));
-  el.style.setProperty('--s', String(s.s));
+  const i = today().indexOf(s);
+  let x: number, y: number, r: number;
+  if (s.free) {
+    x = (s.x / 100) * (board.clientWidth || 360);
+    y = s.y;
+    r = s.r;
+  } else {
+    [x, y, r] = slot(i);
+  }
+  el.style.left = `${String(x)}px`;
+  el.style.top = `${String(y - ART / 2)}px`;
+  el.style.zIndex = String(s.free ? 100 + s.z : s.z);
+  el.style.setProperty('--r', String(r));
+  el.style.setProperty('--s', String(s.free ? s.s : 1));
+}
+
+function layout() {
+  const items = today();
+  const rows = Math.ceil(Math.max(items.length + 1, 4) / COLS);
+  const freeBottom = Math.max(0, ...items.filter((s) => s.free).map((s) => s.y + ART));
+  board.style.height = `${String(Math.max(rows * CELL_H, freeBottom) + 8)}px`;
+  for (const el of board.querySelectorAll<HTMLElement>('.sticker')) {
+    const s = items.find((x) => x.id === el.dataset.id);
+    if (s) place(el, s);
+  }
+  // Empty slots show where the next stickers go, and open the log for what is missing today.
+  board.querySelectorAll('.slot').forEach((e) => e.remove());
+  const missing: Category[] = (['audio', 'book', 'food'] as Category[]).filter((c) => !items.some((s) => s.category === c));
+  const LABEL: Record<Category, string> = { audio: 'A Song', book: 'A Book', food: 'A Bite' };
+  for (let i = items.length; i < rows * COLS; i++) {
+    const [x, y] = slot(i);
+    const c = missing[i - items.length] ?? 'food';
+    const b = document.createElement('button');
+    b.className = 'slot';
+    b.style.left = `${String(x)}px`;
+    b.style.top = `${String(y - ART / 2)}px`;
+    b.innerHTML = `<span class="plus">+</span><span>${i - items.length < missing.length ? LABEL[c] : 'Log More'}</span>`;
+    b.setAttribute('aria-label', `Log ${LABEL[c].toLowerCase()}`);
+    b.onclick = () => openLog(c);
+    board.appendChild(b);
+  }
+  $('tidy').hidden = !items.some((s) => s.free);
 }
 
 function renderToday() {
   const d = new Date();
   $('today-date').textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  const items = today();
-  $('today-count').textContent = items.length ? `${String(items.length)} consumed` : '';
-  board.replaceChildren(...items.map(stickerEl));
-  if (!items.length) board.insertAdjacentHTML('beforeend', '<div class="empty-board"><div><b>Your first sticker goes here</b>Log a song, a book or a bite</div></div>');
+  board.replaceChildren(...today().map(stickerEl));
+  layout();
+  renderTally();
   renderDare();
   renderChain(false);
 }
 
+function renderTally() {
+  const items = today();
+  const n = (c: Category) => items.filter((s) => s.category === c).length;
+  $('tally').innerHTML = (['audio', 'book', 'food'] as Category[]).map((c) => `<span class="t-${c}"><i></i>${{ audio: 'Listened', book: 'Read', food: 'Ate' }[c]} <b>${String(n(c))}</b></span>`).join('');
+}
+
 function renderChain(grow: boolean) {
   const days = loggedDays(state);
-  const shown = Math.min(days, 9);
+  const shown = Math.min(days, 6);
   const colors = ['#f6b52a', '#e8432e', '#2f6b2a', '#3c6fd8', '#6b2d5c'];
-  const links = Array.from({ length: shown }, (_, i) => `<rect class="${grow && i === shown - 1 ? 'new' : ''}" x="${String(3 + i * 17)}" y="${i % 2 ? 9 : 5}" width="24" height="${i % 2 ? 14 : 22}" rx="7" fill="none" stroke="${colors[i % colors.length]!}" stroke-width="4.5"/>`).join('');
-  $('chain').innerHTML = days ? `<svg width="${String(shown * 17 + 12)}" height="32" viewBox="0 0 ${String(shown * 17 + 12)} 32" aria-hidden="true">${links}</svg><span>${String(days)} ${days === 1 ? 'day' : 'days'}, no pressure</span>` : '<span>Your chain starts today</span>';
+  const links = Array.from({ length: shown }, (_, i) => `<rect class="${grow && i === shown - 1 ? 'new' : ''}" x="${String(2 + i * 11)}" y="${i % 2 ? 7 : 4}" width="16" height="${i % 2 ? 10 : 16}" rx="5" fill="none" stroke="${colors[i % colors.length]!}" stroke-width="3.2"/>`).join('');
+  $('chain').innerHTML = `<svg width="${String(shown * 11 + 8)}" height="24" viewBox="0 0 ${String(shown * 11 + 8)} 24" aria-hidden="true">${links}</svg><div><b>${days ? `Day ${String(days)}` : 'Day 1'}</b><span>${days ? 'Your chain, no pressure' : 'Your chain starts today'}</span></div>`;
 }
 
 const PURPLE = /purple|violet|lavender|plum|ube|grape|acai|açaí|blackberr|eggplant/i;
@@ -127,7 +191,7 @@ function renderDare() {
   const done = today().some((s) => s.category === 'food' && (PURPLE.test(s.colorName) || PURPLE.test(s.title)));
   const el = $('dare');
   el.classList.toggle('done', done);
-  el.innerHTML = done ? `<small>Dare done</small>Something purple. ${leo.name} will love this.` : `<small>Today’s dare, from ${leo.name}</small>${leo.dare ?? ''}`;
+  el.innerHTML = `<span class="mark">${done ? '✓' : leo.name[0]!}</span><div><b>${done ? 'Dare done' : `${leo.name}’s dare`}</b><span>${done ? `${leo.name} gets a ping` : 'Something purple today'}</span></div>`;
   if (done && !state.dareDone[dayKey()]) {
     state.dareDone[dayKey()] = true;
     persist();
@@ -137,20 +201,15 @@ function renderDare() {
   }
 }
 
-/** Finds the emptiest spot on the board for a new sticker. */
-function freeSpot(): [number, number] {
-  const taken = today().map((s) => [s.x, s.y]);
-  let best: [number, number] = [50, 45];
-  let bestD = -1;
-  for (let gy = 0; gy < 4; gy++) {
-    for (let gx = 0; gx < 3; gx++) {
-      const x = 26 + gx * 24 + (gy % 2 ? 5 : -3), y = 26 + gy * 15;
-      const d = taken.length ? Math.min(...taken.map(([tx, ty]) => Math.hypot((tx! - x) * 1.1, ty! - y))) : 100 - Math.hypot(x - 50, y - 40);
-      if (d > bestD) { bestD = d; best = [x, y]; }
-    }
-  }
-  return best;
-}
+$('tidy').addEventListener('click', () => {
+  for (const s of today()) s.free = false;
+  persist();
+  board.classList.add('tidying');
+  layout();
+  play('paper', { volume: 0.5, rate: 1.2 });
+  setTimeout(() => board.classList.remove('tidying'), 600);
+});
+window.addEventListener('resize', () => layout());
 
 // Dragging, twisting and tapping.
 function wire(el: HTMLElement, s: Sticker) {
@@ -178,7 +237,17 @@ function wire(el: HTMLElement, s: Sticker) {
   el.addEventListener('pointermove', (e) => {
     if (!pts.has(e.pointerId)) return;
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const rect = board.getBoundingClientRect();
+    if (!s.free && (pts.size >= 2 || Math.hypot(e.clientX - start.x, e.clientY - start.y) >= 6)) {
+      // Comes loose from its slot, from exactly where it sits.
+      const [x, y, r] = slot(today().indexOf(s));
+      s.free = true;
+      s.x = (x / board.clientWidth) * 100;
+      s.y = y;
+      s.r = r;
+      s.s = 1;
+      start.sx = s.x; start.sy = s.y; start.r = s.r; start.s = 1;
+      $('tidy').hidden = false;
+    }
     if (pts.size >= 2) {
       const [a, b] = two();
       s.r = start.r + ((Math.atan2(b.y - a.y, b.x - a.x) - start.ang) * 180) / Math.PI;
@@ -190,8 +259,8 @@ function wire(el: HTMLElement, s: Sticker) {
     const dx = e.clientX - start.x, dy = e.clientY - start.y;
     if (!moved && Math.hypot(dx, dy) < 6) return;
     if (!moved) { moved = true; el.classList.add('lifted'); }
-    s.x = Math.max(4, Math.min(96, start.sx + (dx / rect.width) * 100));
-    s.y = Math.max(4, Math.min(96, start.sy + (dy / rect.height) * 100));
+    s.x = Math.max(8, Math.min(92, start.sx + (dx / board.clientWidth) * 100));
+    s.y = Math.max(ART / 2, Math.min(board.clientHeight + 120, start.sy + dy));
     // A little swing in the direction of travel, like holding a real sticker by its corner.
     const v = e.clientX - lastX;
     lastX = e.clientX;
@@ -215,11 +284,17 @@ function wire(el: HTMLElement, s: Sticker) {
     fx.classList.add('wobble');
     play('pop', { volume: 0.45, rate: 1.15 });
     persist();
+    layout();
   };
   el.addEventListener('pointerup', end);
   el.addEventListener('pointercancel', end);
   el.addEventListener('wheel', (e) => {
     e.preventDefault();
+    if (!s.free) {
+      const [x, y, r] = slot(today().indexOf(s));
+      Object.assign(s, { free: true, x: (x / board.clientWidth) * 100, y, r, s: 1 });
+      $('tidy').hidden = false;
+    }
     if (e.shiftKey || e.ctrlKey) s.s = Math.max(0.6, Math.min(1.7, s.s - e.deltaY * 0.002));
     else s.r += e.deltaY * 0.15;
     place(el, s);
@@ -228,29 +303,35 @@ function wire(el: HTMLElement, s: Sticker) {
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(s); return; }
     const step = e.shiftKey ? 5 : 2;
+    if (!s.free && /^(Arrow|\[|\])/.test(e.key)) {
+      const [x, y, r] = slot(today().indexOf(s));
+      Object.assign(s, { free: true, x: (x / board.clientWidth) * 100, y, r, s: 1 });
+    }
     const moves: Record<string, () => void> = {
-      ArrowLeft: () => (s.x = Math.max(4, s.x - step)), ArrowRight: () => (s.x = Math.min(96, s.x + step)),
-      ArrowUp: () => (s.y = Math.max(4, s.y - step)), ArrowDown: () => (s.y = Math.min(96, s.y + step)),
+      ArrowLeft: () => (s.x = Math.max(8, s.x - step)), ArrowRight: () => (s.x = Math.min(92, s.x + step)),
+      ArrowUp: () => (s.y = Math.max(ART / 2, s.y - step * 4)), ArrowDown: () => (s.y += step * 4),
       '[': () => (s.r -= 8), ']': () => (s.r += 8),
     };
     const m = moves[e.key];
-    if (m) { e.preventDefault(); m(); place(el, s); persist(); }
+    if (m) { e.preventDefault(); m(); place(el, s); persist(); layout(); }
   });
 }
 
 /** A new sticker drops onto today with a wobble, its pop and its own sound. */
 function stick(item: Identified, extra: Partial<Sticker>) {
   if (view !== 'today') go('today');
-  const [x, y] = freeSpot();
   const firstToday = today().length === 0;
-  const s: Sticker = { ...item, id: `${String(Date.now())}-${String(Math.random()).slice(2, 6)}`, at: new Date().toISOString(), x, y, r: Math.round((Math.random() - 0.5) * 18), s: 1, z: Math.max(0, ...today().map((t) => t.z)) + 1, source: 'search', ...extra };
+  const s: Sticker = { ...item, id: `${String(Date.now())}-${String(Math.random()).slice(2, 6)}`, at: new Date().toISOString(), x: 50, y: 0, r: 0, s: 1, z: Math.max(0, ...today().map((t) => t.z)) + 1, source: 'search', ...extra };
   today().push(s);
   persist();
-  board.querySelector('.empty-board')?.remove();
   const el = stickerEl(s);
   el.querySelector('.fx')!.classList.add('drop');
   board.appendChild(el);
-  $('today-count').textContent = `${String(today().length)} consumed`;
+  layout();
+  renderTally();
+  // Bring its slot into view before it lands.
+  const [, y] = slot(today().length - 1);
+  page.scrollTo({ top: Math.max(0, y - page.clientHeight / 2), behavior: 'smooth' });
   // The landing frame of the drop animation is about 520 ms in.
   setTimeout(() => {
     play('pop');
@@ -328,7 +409,8 @@ function setCat(c: Category) {
   $('vf-sub').textContent = VF_SUB[c];
   $('chips').innerHTML = QUICK[c].map((q) => `<button type="button" data-q="${q.replace(/"/g, '&quot;')}">${q}</button>`).join('');
 }
-function openLog() {
+function openLog(start?: Category) {
+  if (start) cat = start;
   photo = null; found = null;
   ($('q') as HTMLInputElement).value = '';
   $('vf-img').hidden = true; $('vf').classList.remove('has-photo'); $('vf-empty').hidden = false;
@@ -340,7 +422,7 @@ function openLog() {
   $('muse-badge').classList.toggle('demo', !live);
 }
 const closeLog = () => { $('log').hidden = true; };
-$('log-btn').addEventListener('click', openLog);
+$('log-btn').addEventListener('click', () => openLog());
 $('log-close').addEventListener('click', closeLog);
 document.querySelector('.seg')!.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-cat]');
@@ -479,11 +561,11 @@ function renderFriends() {
   const parts: string[] = [];
   const top = ms[0];
   if (top) {
-    const [svg] = stickerSvg(artFor(top.item), 0.62);
+    const svg = fitted(top.item, 100);
     parts.push(`<article class="match pop"><small>A match this week</small><p></p><div class="avs"><span class="av">${state.name[0]!}</span><span class="av" style="background:${top.friend.color}">${top.friend.name[0]!}</span></div><div class="art">${svg}</div></article>`);
   }
   for (const f of FRIENDS) {
-    const mini = f.items.map((it, i) => `<div style="transform:rotate(${String([-7, 6, -3][i] ?? 0)}deg)">${stickerSvg(artFor(it), 0.5)[0]}</div>`).join('');
+    const mini = f.items.map((it, i) => `<div style="transform:rotate(${String([-7, 6, -3][i] ?? 0)}deg)">${fitted(it, 82)}</div>`).join('');
     const mine = state.reacted[f.id] ?? [];
     const reacts = REACTIONS.map((r) => `<button data-react="${f.id}" data-emoji="${r}" aria-pressed="${String(mine.includes(r))}" aria-label="React ${r}">${r}<span>${count(f.reactions[r], mine.includes(r))}</span></button>`).join('');
     const flicked = state.flicked.filter((x) => x.to === f.id).at(-1);

@@ -29,13 +29,16 @@
   <main class="views" id="views">
     <section class="view" id="v-today" aria-label="Today">
       <div class="head">
-        <h1>Today</h1>
-        <div class="date"><span id="today-date"></span><span class="count" id="today-count"></span></div>
+        <div class="title-row"><h1>Today</h1><button class="tidy" id="tidy" hidden>Tidy Up</button></div>
+        <div class="date"><span id="today-date"></span></div>
+        <div class="tally" id="tally"></div>
       </div>
-      <div class="board" id="board" aria-label="Today's stickers. Drag to move, twist with two fingers to turn."></div>
+      <div class="page" id="page">
+        <div class="sheet" id="board" aria-label="Today's stickers. Drag one to move it, twist with two fingers to turn it."></div>
+      </div>
       <div class="under">
-        <div class="dare" id="dare"></div>
-        <div class="chain" id="chain"></div>
+        <div class="pillcard" id="chain"></div>
+        <div class="pillcard dare" id="dare"></div>
       </div>
       <div class="dock">
         <button class="logbtn" id="log-btn">Log Something <span class="plus" aria-hidden="true">+</span></button>
