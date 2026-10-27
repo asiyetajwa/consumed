@@ -119,7 +119,7 @@ export const IntroScene: React.FC = () => {
       <Sticker src="ube-latte.png" size={250} x={1450} y={270} rot={8} at={18} />
       <Sticker src="smash-burger.png" size={270} x={1680} y={560} rot={-6} at={28} />
       <Sticker src="tonkotsu-ramen.png" size={280} x={1380} y={800} rot={5} at={38} />
-      <Sticker src="maya.jpg" size={150} x={1170} y={540} rot={-8} at={48} />
+      <Sticker src="maya.jpg" size={150} x={1215} y={170} rot={-8} at={48} />
       <Sticker src="leo.jpg" size={130} x={1720} y={890} rot={7} at={56} />
       <div style={{ position: 'absolute', left: 150, top: 330, opacity: t(4), transform: `translateY(${String((1 - t(4)) * 30)}px)` }}>
         <div style={{ fontSize: 210, fontWeight: 900, letterSpacing: -10, lineHeight: 0.9 }}>Consumed</div>
