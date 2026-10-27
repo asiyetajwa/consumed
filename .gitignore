@@ -9,3 +9,6 @@ film/public/voiceover/
 film/public/music/
 art/
 .art-cache/
+film/public/clips/*.mp4
+film/public/stickers/
+film/public/sfx/
