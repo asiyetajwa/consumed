@@ -12,3 +12,4 @@ art/
 film/public/clips/*.mp4
 film/public/stickers/
 film/public/sfx/
+film/public/clips/*-frames/
