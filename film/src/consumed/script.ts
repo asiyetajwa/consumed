@@ -10,13 +10,13 @@ export type SceneId = 'intro' | 'welcome' | 'friends' | 'song' | 'book' | 'meal'
 
 /** Length of each screen recording in seconds (from scripts/record.mjs). */
 export const CLIP_SECONDS: Partial<Record<SceneId, number>> = {
-  welcome: 13.9,
+  welcome: 14.0,
   friends: 7.2,
-  song: 11.4,
-  book: 10.8,
-  meal: 11.3,
-  dare: 12.2,
-  today: 3.8,
+  song: 10.4,
+  book: 12.8,
+  meal: 11.8,
+  dare: 12.3,
+  today: 3.9,
   tonight: 9.2,
   share: 1.8,
 };

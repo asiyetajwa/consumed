@@ -89,7 +89,7 @@ const app = (id: SceneId, step: string, title: string, sub: string, accent: stri
   return Scene;
 };
 
-export const WelcomeScene = app('welcome', 'Morning', 'Four quick questions', 'Your name, what you love, and who is in your circle.', theme.sun);
+export const WelcomeScene = app('welcome', 'Getting Started', 'Four quick questions', 'Your name, what you love, and who is in your circle.', theme.sun);
 export const FriendsScene = app('friends', 'Friends first', 'Every friend’s day is one card', 'Tap it and it turns to the next thing they enjoyed.', theme.pink);
 export const SongScene = app('song', 'Log a song', 'Type it. Muse Spark finds it.', 'The real cover drops onto your day as a sticker.', theme.sun);
 export const BookScene = app('book', 'Log a book', 'Same book? It’s a match.', 'Maya is reading it too.', theme.blue);

@@ -16,7 +16,7 @@ mkdirSync(OUT, { recursive: true });
 
 const browser = await chromium.launch();
 // The whole phone screen (Playwright's preset leaves room for browser chrome; an installed web app has none).
-const ctx = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+const ctx = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, timezoneId: process.env.TZ_ID ?? 'America/Los_Angeles', locale: 'en-US' });
 // A soft ripple where each tap lands, so the viewer can follow the finger.
 await ctx.addInitScript(() => {
   addEventListener('pointerdown', (e) => {
