@@ -670,6 +670,8 @@ function burst(from: HTMLElement, emoji: string) {
 // ---------- tonight ----------
 let cardUrl: string | null = null;
 let cardBlob: Blob | null = null;
+let faces: { blob: Blob; url: string }[] = [];
+let face = 0;
 const signature = () => today().map((s) => s.id).join(',');
 
 function renderTonight() {
@@ -699,7 +701,16 @@ $('stage').addEventListener('click', (e) => {
   if ($('stage').classList.contains('idle')) { void crack(); return; }
   // The finished card turns in your hand like a piece of glass.
   const deck = (e.target as HTMLElement).closest('#card')?.querySelector<HTMLElement>('.deck');
-  if (deck && $('stage').classList.contains('open')) { play('pop', { volume: 0.4, rate: 1.3 }); void flip(deck); }
+  if (deck && $('stage').classList.contains('open')) {
+    play('pop', { volume: 0.4, rate: 1.3 });
+    if (faces.length > 1) {
+      face = (face + 1) % faces.length;
+      cardBlob = faces[face]!.blob;
+      cardUrl = faces[face]!.url;
+      $('tonight-hint').textContent = face ? 'Painted by Muse Image from your day' : 'Your day, on one card';
+      void flip(deck, `<img src="${cardUrl}" alt="">`);
+    } else void flip(deck);
+  }
 });
 
 async function crack() {
@@ -728,9 +739,14 @@ async function crack() {
       // The stickers make the card instead.
     }
   }
-  cardBlob = await renderCard(items, { date: new Date(), name: state.name, chain: loggedDays(state), painting });
-  if (cardUrl) URL.revokeObjectURL(cardUrl);
-  cardUrl = URL.createObjectURL(cardBlob);
+  // The poster is the card. With a painting from Muse Image, it is the card's other side: a tap turns it over.
+  const opts = { date: new Date(), name: state.name, chain: loggedDays(state) };
+  for (const f of faces) URL.revokeObjectURL(f.url);
+  faces = [];
+  for (const blob of [await renderCard(items, opts), ...(painting ? [await renderCard(items, { ...opts, painting })] : [])]) faces.push({ blob, url: URL.createObjectURL(blob) });
+  face = 0;
+  cardBlob = faces[0]!.blob;
+  cardUrl = faces[0]!.url;
   const img = new Image();
   img.src = cardUrl;
   await img.decode().catch(() => undefined);
@@ -739,7 +755,7 @@ async function crack() {
   play('crack');
   const r = stage.getBoundingClientRect();
   confetti(r.left + r.width / 2, r.top + r.height / 2, 160, 1.6);
-  $('tonight-hint').textContent = painting ? 'Painted by Muse Image from your day' : 'Your day, on one card';
+  $('tonight-hint').textContent = painting ? 'Tap the card to turn it over' : 'Your day, on one card';
   $('actions').hidden = true;
   $('share').hidden = false;
 }

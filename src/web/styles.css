@@ -103,17 +103,17 @@ h1 { font-size: 56px; font-weight: 900; letter-spacing: -2.8px; line-height: .95
 .sticker .fx { display: flex; flex-direction: column; align-items: center; }
 .sticker .rot { transform: rotate(calc(var(--r, 0) * 1deg + var(--tilt, 0) * 1deg)); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
 .sticker.lifted .rot, .sticker.twisting .rot { transition: none; }
-.sticker .art { width: 108px; height: 108px; display: grid; place-items: center; filter: drop-shadow(0 8px 10px rgba(60, 35, 10, .2)) drop-shadow(0 1px 2px rgba(60, 35, 10, .16)); transition: filter .16s, transform .16s; }
+.sticker .art { width: 108px; height: 108px; display: grid; place-items: center; transition: filter .16s, transform .16s; }
 .sticker svg { display: block; pointer-events: none; }
 .sticker .cap { margin-top: 8px; width: 100%; text-align: center; pointer-events: none; line-height: 1.2; }
 .sticker .cap b { display: block; font-size: 14px; font-weight: 800; letter-spacing: -.2px; color: var(--ink); overflow-wrap: anywhere; text-wrap: balance; }
 .sticker .cap span { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--muted); }
 .sticker.lifted, .sticker.twisting { cursor: grabbing; transition: none; }
-.sticker.lifted .art { filter: drop-shadow(0 24px 20px rgba(60, 35, 10, .26)) drop-shadow(0 4px 4px rgba(60, 35, 10, .18)); transform: scale(1.06); }
+.sticker.lifted .art { filter: drop-shadow(0 18px 16px rgba(60, 35, 10, .22)); transform: scale(1.06); }
 .sticker.lifted .cap { opacity: .4; }
 .sticker .fx.drop { animation: drop .95s cubic-bezier(.3, .7, .2, 1) both; }
 .sticker .fx.wobble .art { animation: wobble .55s cubic-bezier(.3, .7, .3, 1); }
-.sticker.golden .art { filter: drop-shadow(0 8px 10px rgba(150, 100, 10, .3)) drop-shadow(0 0 10px rgba(246, 181, 42, .5)); }
+.sticker.golden .art { filter: drop-shadow(0 0 10px rgba(246, 181, 42, .55)); }
 .sticker:focus-visible { outline: none; }
 .sticker:focus-visible .art { outline: 3px solid var(--sun); outline-offset: 6px; border-radius: 16px; }
 .sheet.tidying .sticker { transition: left .5s cubic-bezier(.2, .8, .2, 1), top .5s cubic-bezier(.2, .8, .2, 1), transform .5s; }

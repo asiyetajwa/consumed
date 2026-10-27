@@ -11,8 +11,8 @@ Built for the Meta Global AI Developer Hackathon (Startup track, theme "Build fo
 | Model | Where | What it does |
 |---|---|---|
 | **Muse Spark** (`muse-spark-1.3`) | Logging | Reads a photo (an album, a book cover, a plate) or a search, and returns the item as JSON through structured output: the real title and creator, a short line of facts, one warm note, the sticker shape and three colors from the photo, a color word for dares, and the box around the main subject so the photo itself becomes a die-cut sticker. Reasoning effort is set to low to keep each log fast and cheap. |
-| **SAM 3.1** (`sam-3.1`) | Logging | Cuts the item out of your photo along its own outline. Muse Spark names the object ("bowl of pho", "bag of candy") and SAM 3.1 returns its mask. The app closes small gaps in a rim and fills what it encloses, so a bowl keeps its soup. The sticker is the cut-out with a thin white die-cut edge. |
-| **Muse Image** (`muse-image-1.0`) | Tonight, and food pictures | Pictures a dish or drink no public catalog has a photo of. Paints the day's items as one illustration for the Consumed card, from short visual descriptions Muse Spark wrote at log time. Web search, image search and the shell tool are turned off, and the prompt asks for no text or logos. |
+| **SAM 3.1** (`sam-3.1`) | Logging | Cuts the item out of your photo along its own outline. Muse Spark names the object ("bowl of pho", "bag of candy") and SAM 3.1 returns its mask. The app closes small gaps in a rim and fills what it encloses, so a bowl keeps its soup. The sticker is the cut-out in the Pop Poster style: a white die-cut edge, a thick ring in the item's own color and a hard ink shadow. |
+| **Muse Image** (`muse-image-1.0`) | Tonight, and food pictures | Pictures a dish or drink no public catalog has a photo of. Paints the day's items as one illustration for the back of the Consumed card, from short visual descriptions Muse Spark wrote at log time. Web search, image search and the shell tool are turned off, and the prompt asks for no text or logos. |
 
 ## Real artwork
 
@@ -52,6 +52,7 @@ A per-visitor hourly allowance keeps a public deployment from draining the budge
 - **A welcome, one question at a time.** Each answer collapses into a ticked line, a ring counts the steps, the line beside it changes with each step, and it ends with a thank you that types itself out.
 
 - **Depth cards.** A friend's three things sit on one card that looks like a thick piece of glass: the picture stacked in translucent layers. Each tap tilts it in 3D, fans the layers apart, and turns to the next thing with its own sound. Tonight's Consumed card turns the same way when you tap it.
+- **Pop Poster stickers.** Every sticker, photo or cover, gets a white edge, a thick ring in its own color and a hard ink shadow, like a screen print. The shareable card is a green poster of your day's stickers, big and overlapping; tap it to turn it over to Muse Image's painting of the same day. You share whichever side is up.
 - **Everything is a sticker.** Drag to move, twist with two fingers to turn and resize. On a computer, scroll to turn, or use the arrow keys and `[` `]`. A new sticker drops in with a wobble.
 - **Sound on the core loop.** A pop when a sticker lands, then the item's own sound:
   - a chime for music and audiobooks;

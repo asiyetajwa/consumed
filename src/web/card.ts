@@ -2,7 +2,7 @@
 // With live calls, the middle is Muse Image's painting of the day; without, it is the day's own stickers.
 
 import { artFor, inline } from './artwork.js';
-import { loadImage, stickerSvg } from './stickers.js';
+import { accentOf, loadImage, stickerSvg } from './stickers.js';
 import type { Sticker } from './store.js';
 
 const W = 1080, H = 1920;
@@ -22,7 +22,63 @@ export function summary(items: Sticker[]): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/**
+ * Two faces. The poster (the default): your stickers big on a green field, each with its color ring and ink
+ * shadow. The painting: Muse Image's illustration of your day on cream paper.
+ */
 export async function renderCard(items: Sticker[], opts: { date: Date; name: string; chain: number; painting?: string }): Promise<Blob> {
+  return opts.painting ? paintedCard(items, opts, opts.painting) : posterCard(items, opts);
+}
+
+const GREEN = '#2f6b2a', GREEN_DEEP = '#24561f', SUN = '#f6b52a', CREAM = '#fcf9ec';
+
+async function posterCard(items: Sticker[], opts: { date: Date; name: string; chain: number }): Promise<Blob> {
+  await document.fonts.ready;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d')!;
+  g.fillStyle = GREEN;
+  g.fillRect(0, 0, W, H);
+  g.fillStyle = GREEN_DEEP;
+  g.beginPath(); g.arc(W / 2, 1010, 480, 0, Math.PI * 2); g.fill();
+
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = CREAM;
+  g.font = '900 150px "Inter Tight", Arial, sans-serif';
+  g.fillText('Consumed', 72, 230);
+  g.fillStyle = SUN;
+  g.fillText(opts.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), 72, 372);
+  g.fillStyle = 'rgba(252, 249, 236, .75)';
+  g.font = '600 40px "Inter Tight", Arial, sans-serif';
+  g.fillText(summary(items), 76, 440);
+
+  // The stickers, big, in a tight grid that overlaps a little so they read as one pile.
+  const shown = items.slice(0, 6);
+  const n = shown.length;
+  const big = n <= 4;
+  const box = n === 1 ? 640 : big ? 470 : 340;
+  const spots: [number, number][] = n === 1 ? [[540, 1000]] : n === 2 ? [[330, 1000], [750, 1000]] : n === 3 ? [[320, 790], [760, 790], [540, 1230]] : big ? [[320, 790], [760, 790], [320, 1230], [760, 1230]] : [[220, 820], [540, 790], [860, 820], [220, 1170], [540, 1200], [860, 1170]];
+  const tilts = [-6, 5, 4, -5, -3, 6];
+  for (const [i, it] of shown.entries()) {
+    const base = artFor(it);
+    const art = { ...base, photo: await inline(base.photo) };
+    const [, w0, h0] = stickerSvg(art, 1);
+    const [svg, sw, sh] = stickerSvg(art, box / Math.max(w0, h0));
+    const img = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+    const [x, y] = spots[i]!;
+    g.save();
+    g.translate(x, y);
+    g.rotate((tilts[i]! * Math.PI) / 180);
+    g.drawImage(img, -sw / 2, -sh / 2, sw, sh);
+    g.restore();
+  }
+
+  list(g, items, CREAM, 'rgba(252, 249, 236, .7)');
+  footer(g, opts, CREAM);
+  return toBlob(c);
+}
+
+async function paintedCard(items: Sticker[], opts: { date: Date; name: string; chain: number }, painting: string): Promise<Blob> {
   await document.fonts.ready;
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
@@ -47,61 +103,46 @@ export async function renderCard(items: Sticker[], opts: { date: Date; name: str
   g.save();
   roundRect(g, px, py, pw, ph, 56);
   g.clip();
-  if (opts.painting) {
-    const img = await loadImage(opts.painting);
-    const k = Math.max(pw / img.width, ph / img.height);
-    g.drawImage(img, px + (pw - img.width * k) / 2, py + (ph - img.height * k) / 2, img.width * k, img.height * k);
-  } else {
-    g.fillStyle = '#f4efdc';
-    g.fillRect(px, py, pw, ph);
-    await drawStickers(g, items, px, py, pw, ph);
-  }
+  const img = await loadImage(painting);
+  const k = Math.max(pw / img.width, ph / img.height);
+  g.drawImage(img, px + (pw - img.width * k) / 2, py + (ph - img.height * k) / 2, img.width * k, img.height * k);
   g.restore();
 
-  // The list
+  g.restore();
+  list(g, items, INK, MUTED);
+  footer(g, opts, INK);
+  return toBlob(c);
+}
+
+function list(g: CanvasRenderingContext2D, items: Sticker[], ink: string, muted: string) {
+  g.textAlign = 'left';
   g.font = '700 38px "Inter Tight", Arial, sans-serif';
   let y = 1580;
   for (const it of items.slice(0, 4)) {
-    g.fillStyle = it.colors[0] === '#1b1716' ? it.colors[1] : it.colors[0];
+    g.fillStyle = accentOf(it.colors, it.golden);
     g.beginPath(); g.arc(90, y - 13, 13, 0, Math.PI * 2); g.fill();
-    g.fillStyle = INK;
+    g.fillStyle = ink;
     const by = it.creator && it.category !== 'food' ? `, ${it.creator.split(',')[0] ?? ''}` : '';
     g.fillText(fit(g, `${it.title}${by}`, W - 200), 124, y);
     y += 62;
   }
   if (items.length > 4) {
-    g.fillStyle = MUTED;
+    g.fillStyle = muted;
     g.fillText(`and ${String(items.length - 4)} more`, 124, y);
   }
+}
 
-  // Footer
+function footer(g: CanvasRenderingContext2D, opts: { name: string; chain: number }, ink: string) {
   g.font = '700 30px "Inter Tight", Arial, sans-serif';
-  g.fillStyle = INK;
+  g.fillStyle = ink;
+  g.textAlign = 'left';
   g.fillText(`consumed.today/${opts.name.toLowerCase()}`, 72, H - 64);
   g.textAlign = 'right';
   g.fillText(`Day ${String(opts.chain)} of the chain`, W - 72, H - 64);
-
-  return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not make the card.'))), 'image/png'));
+  g.textAlign = 'left';
 }
 
-async function drawStickers(g: CanvasRenderingContext2D, items: Sticker[], x: number, y: number, w: number, h: number) {
-  const list = items.slice(0, 7);
-  const spots = [[0.3, 0.27], [0.72, 0.24], [0.5, 0.52], [0.24, 0.72], [0.74, 0.7], [0.5, 0.86], [0.82, 0.47]];
-  for (const [i, it] of list.entries()) {
-    const base = artFor(it);
-    const [svg, sw, sh] = stickerSvg({ ...base, photo: await inline(base.photo) }, 2.1);
-    const img = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
-    const [fx, fy] = spots[i]!;
-    g.save();
-    g.translate(x + fx! * w, y + fy! * h);
-    g.rotate((it.r * Math.PI) / 180);
-    g.shadowColor = 'rgba(60, 35, 10, .25)';
-    g.shadowBlur = 28;
-    g.shadowOffsetY = 14;
-    g.drawImage(img, -sw / 2, -sh / 2, sw, sh);
-    g.restore();
-  }
-}
+const toBlob = (c: HTMLCanvasElement) => new Promise<Blob>((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not make the card.'))), 'image/png'));
 
 function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   g.beginPath();
