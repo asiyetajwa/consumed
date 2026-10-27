@@ -14,9 +14,15 @@ const PHOTOS = process.env.PHOTOS ?? '../demo-photos';
 const OUT = 'public/clips';
 mkdirSync(OUT, { recursive: true });
 
+// A US time zone where it is evening now, so meals read as dinner whenever this runs (TZ_ID overrides).
+const ZONES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu'];
+const hourIn = (tz) => Number(new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
+const timezoneId = process.env.TZ_ID ?? ZONES.reduce((a, b) => (Math.abs(hourIn(b) - 19.5) < Math.abs(hourIn(a) - 19.5) ? b : a));
+console.log(`clock: ${timezoneId}, ${String(hourIn(timezoneId))}:00`);
+
 const browser = await chromium.launch();
 // The whole phone screen (Playwright's preset leaves room for browser chrome; an installed web app has none).
-const ctx = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, timezoneId: process.env.TZ_ID ?? 'America/Los_Angeles', locale: 'en-US' });
+const ctx = await browser.newContext({ ...devices['iPhone 13'], viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, timezoneId, locale: 'en-US' });
 // A soft ripple where each tap lands, so the viewer can follow the finger.
 await ctx.addInitScript(() => {
   addEventListener('pointerdown', (e) => {
@@ -33,8 +39,10 @@ page.on('pageerror', (e) => errors.push(String(e)));
 const cdp = await ctx.newCDPSession(page);
 
 let frames = [];
+// Seconds cut out of the current scene by skip(): later frames and sounds move earlier by this much.
+let shift = 0;
 cdp.on('Page.screencastFrame', async ({ data, metadata, sessionId }) => {
-  frames.push({ data, t: metadata.timestamp });
+  frames.push({ data, t: metadata.timestamp - shift });
   await cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => undefined);
 });
 
@@ -44,11 +52,20 @@ const wait = (ms) => page.waitForTimeout(ms);
 /** Records one scene. `mark(sound, delaySeconds)` notes a sound at this moment (plus a delay). */
 async function scene(name, run) {
   frames = [];
+  shift = 0;
   const marks = [];
   await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 90, maxWidth: 780, maxHeight: 1688 });
   await wait(250);
   const startWall = Date.now() / 1000;
-  const mark = (sound, delay = 0, volume = 1) => marks.push({ sound, at: Date.now() / 1000 - startWall + delay, volume });
+  const mark = (sound, delay = 0, volume = 1) => marks.push({ sound, at: Date.now() / 1000 - startWall - shift + delay, volume });
+  /** A jump cut: stops recording while `wait` runs (a model at work), then carries on from where it ended. */
+  mark.skip = async (wait) => {
+    await cdp.send('Page.stopScreencast');
+    const t0 = Date.now() / 1000;
+    await wait();
+    shift += Date.now() / 1000 - t0;
+    await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 90, maxWidth: 780, maxHeight: 1688 });
+  };
   await run(mark);
   await wait(400);
   await cdp.send('Page.stopScreencast');
@@ -76,6 +93,19 @@ async function scene(name, run) {
 }
 
 const visibleLog = () => page.locator('.view:not([data-pos]) .js-log');
+/** Waits for the result sheet; if the model call failed (a rare 404 from the API), runs `again` once. */
+async function result(again) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const which = await Promise.race([
+      page.waitForSelector('#result:not([hidden])', { timeout: 120000 }).then(() => 'ok'),
+      page.waitForSelector('#log-err:not([hidden])', { timeout: 120000 }).then(() => 'err'),
+    ]);
+    if (which === 'ok') return;
+    console.log('retrying after:', await page.textContent('#log-err'));
+    await again();
+  }
+  throw new Error('No result after a retry');
+}
 // A sticker lands about 0.64 s after Stick It (sheet closes, then the drop): a pop, then its own sound.
 const stickSounds = (mark, sound) => { mark('pop', 0.64); mark(sound, 0.71); };
 
@@ -113,7 +143,7 @@ async function logBySearch(mark, cat, text, sound) {
   await page.keyboard.type(text, { delay: 75 });
   await wait(300);
   await page.click('#search button');
-  await page.waitForSelector('#result:not([hidden])', { timeout: 60000 });
+  await result(() => page.click('#search button'));
   mark('pop', 0, 0.35);
   await wait(2600);
   stickSounds(mark, sound);
@@ -128,9 +158,13 @@ await scene('meal', async (mark) => {
   await visibleLog().click(); await wait(700);
   await page.click('.seg [data-cat="food"]'); await wait(500);
   await page.setInputFiles('#photo', `${PHOTOS}/pho.jpg`);
-  await page.waitForSelector('#result:not([hidden])', { timeout: 90000 });
+  await result(() => page.setInputFiles('#photo', `${PHOTOS}/pho.jpg`));
   mark('pop', 0, 0.35);
-  await wait(2800);
+  // Muse Image paints the photo (about ten seconds): a few seconds of it working, then a cut to the painting.
+  await wait(2600);
+  await mark.skip(() => page.waitForFunction(() => document.getElementById('res-credit')?.textContent?.startsWith('Painted'), null, { timeout: 120000 }));
+  mark('pop', 0.05, 0.3);
+  await wait(2600);
   stickSounds(mark, 'chew');
   await page.click('#stick');
   await wait(2800);
@@ -140,7 +174,7 @@ await scene('dare', async (mark) => {
   await visibleLog().click(); await wait(700);
   await page.click('.seg [data-cat="food"]'); await wait(500);
   await page.click('#chips [data-q="Ube Latte"]');
-  await page.waitForSelector('#result:not([hidden])', { timeout: 60000 });
+  await result(() => page.click('#chips [data-q="Ube Latte"]'));
   mark('pop', 0, 0.35);
   await wait(2200);
   stickSounds(mark, 'burp');

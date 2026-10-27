@@ -2,7 +2,7 @@
 
 **Spotify Wrapped, but every day, and for everything you consume.**
 
-Consumed is one daily page of what you listened to, read and ate. You log something in seconds, by photo or by search, and it lands on today's page as a glossy sticker you can drag and twist. Your friends' days sit in one feed, with matches when two of you are on the same book or song. At night your day seals into a capsule that cracks open as one card, ready for Instagram Stories or WhatsApp.
+Consumed is one daily page of what you listened to, read and ate. You log something in seconds, by photo or by search, and Muse Image repaints it by hand, in the gouache and colored-pencil style of the illustrated food on realfood.gov's new food pyramid. It lands on today's page as a painting you can drag and twist. Your friends' days sit in one feed, with matches when two of you are on the same book or song. At night your day seals into a capsule that cracks open as one card, ready for Instagram Stories or WhatsApp.
 
 Built for the Meta Global AI Developer Hackathon (Startup track, theme "Build for Your World").
 
@@ -10,22 +10,23 @@ Built for the Meta Global AI Developer Hackathon (Startup track, theme "Build fo
 
 | Model | Where | What it does |
 |---|---|---|
-| **Muse Spark** (`muse-spark-1.3`) | Logging | Reads a photo (an album, a book cover, a plate) or a search, and returns the item as JSON through structured output: the real title and creator, a short line of facts, one warm note, the sticker shape and three colors from the photo, a color word for dares, and the box around the main subject so the photo itself becomes a die-cut sticker. Reasoning effort is set to low to keep each log fast and cheap. |
-| **SAM 3.1** (`sam-3.1`) | Logging | Cuts the item out of your photo along its own outline. Muse Spark names the object ("bowl of pho", "bag of candy") and SAM 3.1 returns its mask. The app closes small gaps in a rim and fills what it encloses, so a bowl keeps its soup. The sticker is the cut-out in the Pop Poster style: a white die-cut edge, a thick ring in the item's own color and a hard ink shadow. |
-| **Muse Image** (`muse-image-1.0`) | Tonight, and food pictures | Pictures a dish or drink no public catalog has a photo of. Paints the day's items as one illustration for the back of the Consumed card, from short visual descriptions Muse Spark wrote at log time. Web search, image search and the shell tool are turned off, and the prompt asks for no text or logos. |
+| **Muse Spark** (`muse-spark-1.3`) | Logging | Reads a photo (an album, a book cover, a plate) or a search, and returns the item as JSON through structured output: the real title and creator, a short line of facts, one warm note, a shape and three colors, a color word for dares, a short noun for the object ("bowl of pho") and the box around it. Reasoning effort is set to low to keep each log fast and cheap. |
+| **SAM 3.1** (`sam-3.1`) | Logging | Lifts the dish off the table: from Muse Spark's noun, it returns the mask of the item in your photo, so Muse Image is handed the dish alone. It runs again on the finished painting, so a white bowl on cream paper keeps its rim when the painting is lifted off its background. The app closes small gaps in a mask and fills what it encloses, so a bowl keeps its soup. |
+| **Muse Image** (`muse-image-1.0`) | Logging and Tonight | Repaints every item through the image edit endpoint, keeping what makes it that item: your dish, its bowl and garnish, or the real album or book cover, which becomes a painted record sleeve or a standing hardcover. At night it paints the day's items as one illustration for the back of the Consumed card, from short visual descriptions Muse Spark wrote at log time. Web search, image search and the shell tool are off for generations. |
 
-## Real artwork
+The painting arrives on plain cream paper. The browser lifts it off (`src/shared/lift.ts`): it floods the paper in from the edges, keeps the painting's soft contact shadow as a warm, translucent grey, drops paper specks, and uses SAM 3.1's mask to protect anything paper-colored inside the dish. Until the painting arrives (about 10 seconds), the real photo or cover shows, and you can stick it straight away; the sticker turns into the painting when it is ready.
 
-Stickers show the real thing whenever there is a picture of it:
+## Real artwork, repainted
+
+Every painting starts from the real thing:
 - **Music, podcasts and audiobooks:** cover art from the Apple iTunes Search API (Apple Music, Apple Podcasts, Apple Books).
 - **Books:** covers from Open Library.
 - **Dishes:** photos from TheMealDB.
-- **Your own photos:** for food, your photo is the sticker, cut out along the item's outline by SAM 3.1.
-- **Demo food photos** are cut out the same way by `npm run fetch-art`.
+- **Your own photos:** for food, your own photo, lifted off the table by SAM 3.1.
 
-When none of those has a picture of a dish or drink, Muse Image pictures it in live mode. The demo food photos in `demo-art/` were made this way, and the app labels them as made with Muse Image.
+When none of those has a picture of a dish or drink, Muse Image pictures it first in live mode. The demo food photos in `demo-art/` were made this way.
 
-Each sticker credits where its artwork came from. Third-party artwork is fetched at runtime, or into `art/` with `npm run fetch-art` for a static demo. It is never committed. Spotify, Audible, Kindle and Goodreads have no keyless public API for artwork, so they are not used.
+The demo catalog is painted once ahead of time (`npm run fetch-art`, then `npm run paint-art`), so search results land as paintings at once. Paintings of our own demo photos are in `demo-art/painted/`. Third-party covers and their paintings are fetched into `art/` and never committed. Each item credits where its painting came from ("Painted by Muse Image from Apple Music"). Spotify, Audible, Kindle and Goodreads have no keyless public API for artwork, so they are not used. If Muse Image declines a cover, the real cover is used instead.
 
 Measured on October 26, 2026:
 
@@ -33,11 +34,12 @@ Measured on October 26, 2026:
 |---|---|---|---|
 | Identify a search | Muse Spark | 2 to 4 s | about $0.004 |
 | Identify a photo | Muse Spark | about 3 s | about $0.0045 |
-| Cut out a photo | SAM 3.1 | about 1 s | $0.0025 |
-| Picture a dish | Muse Image | about 9 s | $0.01 |
+| Lift a dish off a photo or a painting | SAM 3.1 | about 1 to 3 s | $0.0025 |
+| Repaint an item | Muse Image | about 8 to 12 s | $0.01 |
+| Picture a dish no catalog has | Muse Image | about 9 s | $0.01 |
 | Paint the day's card | Muse Image | about 11 s | $0.01 |
 
-A day with four logs (two of them photos) and one card costs about $0.04.
+A day with five logs (two of them photos), each repainted, and one card costs about $0.09. Catalog items are already painted, so they cost only the identify call.
 
 Every call goes through a spend guard (`src/server/spend.ts`):
 - it reserves the call's worst case before sending, at the published prices;
@@ -52,8 +54,8 @@ A per-visitor hourly allowance keeps a public deployment from draining the budge
 - **A welcome, one question at a time.** Each answer collapses into a ticked line, a ring counts the steps, the line beside it changes with each step, and it ends with a thank you that types itself out.
 
 - **Depth cards.** A friend's three things sit on one card that looks like a thick piece of glass: the picture stacked in translucent layers. Each tap tilts it in 3D, fans the layers apart, and turns to the next thing with its own sound. Tonight's Consumed card turns the same way when you tap it.
-- **Pop Poster stickers.** Every sticker, photo or cover, gets a white edge, a thick ring in its own color and a hard ink shadow, like a screen print. The shareable card is a green poster of your day's stickers, big and overlapping; tap it to turn it over to Muse Image's painting of the same day. You share whichever side is up.
-- **Everything is a sticker.** Drag to move, twist with two fingers to turn and resize. On a computer, scroll to turn, or use the arrow keys and `[` `]`. A new sticker drops in with a wobble.
+- **Hand-painted everything.** Songs, books and meals sit straight on the cream page like the food on the pyramid poster, each with its own soft shadow and nothing around it. The shareable card is a cream poster with one big black title ("Sam's Day") and your paintings piled into an upside-down pyramid; tap it to turn it over to Muse Image's painting of the whole day. You share whichever side is up.
+- **Everything moves.** Drag to move, twist with two fingers to turn and resize. On a computer, scroll to turn, or use the arrow keys and `[` `]`. A new item drops in with a wobble, and Tidy Up puts everything back.
 - **Sound on the core loop.** A pop when a sticker lands, then the item's own sound:
   - a chime for music and audiobooks;
   - rustling paper for books;
@@ -82,7 +84,7 @@ npm test
 ```
 
 Without a key, Consumed runs in **demo mode** at no cost:
-- search uses a small built-in catalog, and anything else still becomes a plain sticker;
+- search uses a small built-in catalog of already painted items, and anything else still becomes a drawn sticker;
 - the card is composed from your stickers;
 - photos need live mode.
 
@@ -97,11 +99,13 @@ Your log stays in your browser. The friends in the feed are sample friends, and 
 
 - `src/server/meta.ts`: the Meta Model API calls, the JSON schema and the image prompts.
 - `src/server/art.ts`: artwork from Apple, Open Library and TheMealDB.
-- `scripts/fetch-art.ts`: gathers artwork for the demo catalog.
+- `scripts/fetch-art.ts`: gathers artwork for the demo catalog; `scripts/paint-art.ts` paints it.
+- `src/shared/lift.ts`: lifts a painting off its paper, keeping its shadow.
+- `src/web/paint.ts`: asks Muse Image to paint an item, then lifts it.
 - `src/server/spend.ts`: the spend guard and ledger.
 - `src/server/index.ts`: the API and static server.
 - `src/shared/catalog.ts`: the demo catalog.
-- `src/web/stickers.ts`: sticker art, drawn as SVG from a shape and three colors, and photo cutouts.
+- `src/web/stickers.ts`: how each item is drawn: its painting, or until then its photo or cover, or a drawing from its shape and colors.
 - `src/web/main.ts`: the app (Today, Friends, Tonight, the log sheet).
 - `src/web/card.ts`: the 1080 by 1920 share card.
 - `src/web/sound.ts`, `src/web/sfx/`: the sounds, made with ElevenLabs sound effects.

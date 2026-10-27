@@ -8,6 +8,7 @@ import { alsoHas, FRIENDS, matches, matchLine, REACTIONS } from './friends.js';
 import { isMuted, play, setMuted, soundFor, unlock } from './sound.js';
 import { artFor, catalogArt, fetchArt, loadManifest } from './artwork.js';
 import { makeCutout, requestCutout } from './cutout.js';
+import { requestPaint } from './paint.js';
 import { runOnboarding } from './onboarding.js';
 import { deckHtml, flip } from './deck.js';
 import { cropPhoto, downsize, stickerSvg } from './stickers.js';
@@ -72,13 +73,13 @@ document.addEventListener('click', (e) => {
 const avatar = (id: string, name: string) => `<img class="av" src="avatars/${id}.jpg" alt="${name}" width="44" height="44">`;
 
 // ---------- today ----------
-// Today is a sticker album page: stickers sit in a two-column grid, all the same size, with a gentle alternating
-// tilt and a two-line caption. Drag one and it comes loose to sit anywhere; Tidy Up puts everything back.
+// Today is an illustrated page: paintings sit straight in a two-column grid, all the same size, each with a
+// two-line caption. Drag one and it comes loose to sit anywhere; Tidy Up puts everything back.
 const board = $('board');
 const page = $('page');
 const COLS = 2;
-const CELL_H = 184;
-const ART = 108;
+const CELL_H = 204;
+const ART = 128;
 
 function captionLines(s: Sticker): [string, string] {
   if (s.category === 'food') {
@@ -118,8 +119,7 @@ function stickerEl(s: Sticker): HTMLElement {
 function slot(i: number): [number, number, number] {
   const w = board.clientWidth || 360;
   const col = i % COLS, row = Math.floor(i / COLS);
-  const tilt = [-3, 2.5, 2, -2.5][i % 4]!;
-  return [(w / COLS) * (col + 0.5), row * CELL_H + 14 + ART / 2, tilt];
+  return [(w / COLS) * (col + 0.5), row * CELL_H + 14 + ART / 2, 0];
 }
 
 function place(el: HTMLElement, s: Sticker) {
@@ -406,7 +406,7 @@ $('d-remove').addEventListener('click', () => {
 // ---------- the log sheet ----------
 let cat: Category = 'audio';
 let photo: string | null = null;
-let found: (IdentifyResponse & { photo?: string; artSource?: string; ratio?: number; cutout?: boolean }) | null = null;
+let found: (IdentifyResponse & { photo?: string; artSource?: string; ratio?: number; cutout?: boolean; painted?: boolean; painting?: boolean; stuck?: string }) | null = null;
 const PLACEHOLDER: Record<Category, string> = { audio: 'Search a song or audiobook', book: 'Search a book or author', food: 'What did you eat or drink?' };
 const VF_SUB: Record<Category, string> = { audio: 'An album cover or what is playing', book: 'The cover of the book', food: 'Your plate or your cup' };
 const QUICK: Record<Category, string[]> = { audio: ['Espresso', 'Project Hail Mary', 'Birds of a Feather', 'Not Like Us'], book: ['Tomorrow, and Tomorrow, and Tomorrow', 'James', 'Fourth Wing', 'Intermezzo'], food: ['Shakshuka', 'Ube Latte', 'Smash Burger', 'Cold Brew'] };
@@ -474,8 +474,8 @@ async function identify() {
     const body = status ? await askServer(query) : offline(query);
     if (!body.item.found) throw new Error(photo ? 'Muse could not spot a song, book or bite in that one. Try another photo or type it.' : 'Nothing found. Try another way of saying it.');
     found = { ...body };
-    // Your own photo of your plate is the best picture of it, cut out along its outline by SAM 3.1.
-    // For music and books, the real cover is.
+    // What Muse Image paints from: your own plate, lifted off the table by SAM 3.1, or for music and books the
+    // real cover.
     if (photo && body.item.category === 'food') await cutOut(photo, body.item);
     else {
       const known = catalogArt(body.item.title);
@@ -489,10 +489,40 @@ async function identify() {
     }
     if (body.item.category !== cat) setCat(body.item.category);
     showResult();
+    void paintFound();
   } catch (e) {
     showErr(e instanceof Error ? e.message : String(e));
   } finally {
     $('scan').hidden = true;
+  }
+}
+
+/**
+ * Muse Image repaints what was found (the cut-out photo or the real cover) while the result is on screen. The
+ * real picture shows until the painting arrives; if it was already stuck, the sticker on the page turns into it.
+ */
+async function paintFound() {
+  const f = found;
+  if (!f || !f.photo || f.painted || !status?.live) return;
+  f.painting = true;
+  $('res-art').classList.add('painting');
+  const was = $('res-credit').textContent;
+  $('res-credit').textContent = 'Muse Image is painting it';
+  const p = await requestPaint(f.photo, f.item);
+  f.painting = false;
+  if (found === f) {
+    $('res-art').classList.remove('painting');
+    $('res-credit').textContent = p ? `Painted by Muse Image from ${f.artSource ?? 'your photo'}` : was;
+  }
+  if (!p) return;
+  f.photo = p.image; f.ratio = p.ratio; f.painted = true; f.cutout = false;
+  if (found === f && !$('result').hidden) { drawResultArt(); play('pop', { volume: 0.3, rate: 1.7 }); }
+  const s = f.stuck ? today().find((x) => x.id === f.stuck) : undefined;
+  if (s) {
+    Object.assign(s, { photo: p.image, ratio: p.ratio, painted: true, cutout: false });
+    persist();
+    const el = board.querySelector<HTMLElement>(`.sticker[data-id="${s.id}"] .rot`);
+    if (el) { el.innerHTML = fitted(s, ART); el.closest('.fx')?.classList.add('wobble'); }
   }
 }
 
@@ -526,21 +556,25 @@ function offline(query: string): IdentifyResponse {
   return { item: searchCatalog(query, cat), source: 'demo' };
 }
 
+function drawResultArt() {
+  if (!found) return;
+  const golden = ($('finished') as HTMLInputElement).checked;
+  const [svg] = stickerSvg(artFor({ ...found.item, photo: found.photo, ratio: found.ratio, cutout: found.cutout, painted: found.painted, golden }), 0.72);
+  $('res-art').innerHTML = svg;
+}
+
 function showResult() {
   if (!found) return;
   const it = found.item;
   const finished = $('finished') as HTMLInputElement;
   finished.checked = false;
-  const drawArt = () => {
-    const [svg] = stickerSvg(artFor({ ...it, photo: found?.photo, ratio: found?.ratio, cutout: found?.cutout, golden: finished.checked }), 0.72);
-    $('res-art').innerHTML = svg;
-  };
-  drawArt();
-  finished.onchange = () => { drawArt(); if (finished.checked) play('chime', { rate: 1.25, volume: 0.6 }); };
+  drawResultArt();
+  finished.onchange = () => { drawResultArt(); if (finished.checked) play('chime', { rate: 1.25, volume: 0.6 }); };
   $('res-eyebrow').innerHTML = found.source === 'muse' ? '<i></i>Muse Spark sees' : '<i></i>Found it';
   $('res-title').textContent = it.title;
   $('res-meta').textContent = [it.creator, it.detail].filter(Boolean).join(' · ');
-  $('res-credit').textContent = found.artSource ? `Art: ${found.artSource}` : '';
+  const knownPainted = !found.photo && catalogArt(it.title)?.painted;
+  $('res-credit').textContent = found.painted || knownPainted ? `Painted by Muse Image from ${found.artSource ?? 'your photo'}` : found.artSource ? `Art: ${found.artSource}` : '';
   const friend = alsoHas(it);
   const verb = it.category === 'book' ? 'is reading this too' : it.category === 'audio' ? 'played this today too' : 'had this today too';
   $('res-note').innerHTML = '';
@@ -562,7 +596,9 @@ $('stick').addEventListener('click', () => {
   const golden = !$('finish').hidden && ($('finished') as HTMLInputElement).checked;
   const f = found;
   closeLog();
-  setTimeout(() => stick(f.item, { photo: f.photo, ratio: f.ratio, cutout: f.cutout, artSource: f.artSource, golden, source: photo && f.item.category === 'food' ? 'photo' : 'search', model: f.model }), 120);
+  const id = `${String(Date.now())}-${String(Math.random()).slice(2, 6)}`;
+  f.stuck = id;
+  setTimeout(() => stick(f.item, { id, photo: f.photo, ratio: f.ratio, cutout: f.cutout, painted: f.painted, artSource: f.artSource, golden, source: photo && f.item.category === 'food' ? 'photo' : 'search', model: f.model }), 120);
 });
 
 // ---------- friends ----------
@@ -573,7 +609,7 @@ const escText = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 function tileFor(it: Identified): string {
   const a = artFor(it);
   const tint = `color-mix(in srgb, ${it.colors[0] === '#1b1716' ? it.colors[1] : it.colors[0]} 26%, #fcf9ec)`;
-  if (a.photo && a.frame !== 'cutout') return `<img class="tile-img" src="${escAttr(a.photo)}" alt="">`;
+  if (a.photo && a.frame !== 'cutout' && a.frame !== 'painted') return `<img class="tile-img" src="${escAttr(a.photo)}" alt="">`;
   if (a.photo) return `<div class="tile-cut" style="background:${tint}"><img src="${escAttr(a.photo)}" alt=""></div>`;
   return `<div class="tile-cut" style="background:${tint}">${fitted(it, 130)}</div>`;
 }

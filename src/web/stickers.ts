@@ -1,6 +1,7 @@
-// Sticker art. Every sticker is drawn here as SVG from the item's shape and three colors: a white die-cut edge,
-// flat painted color, a soft inner shade and a glossy highlight. Books and records carry their title, so a
-// sticker reads as the thing itself. Photo stickers are the photo, cut out round (or as a cover) with the same edge.
+// Sticker art. Most stickers are paintings: Muse Image repaints the photo or the real cover in a hand-painted
+// gouache style and the browser lifts it off its cream (see paint.ts), so it sits straight on the page with its
+// own soft shadow and nothing around it. Until a painting arrives, or without live mode, an item shows its photo
+// or cover, or a drawing made here as SVG from its shape and three colors.
 
 import type { Shape } from '../shared/types.js';
 
@@ -17,7 +18,7 @@ export interface Art {
   ratio?: number;
 }
 
-export type Frame = 'sleeve' | 'square' | 'cover' | 'round' | 'cutout';
+export type Frame = 'sleeve' | 'square' | 'cover' | 'round' | 'cutout' | 'painted';
 
 export function frameFor(category: string, kind: string): Frame {
   if (category === 'book') return 'cover';
@@ -76,6 +77,13 @@ export function stickerSvg(a: Art, size = 1): [string, number, number] {
   if (a.photo) {
     const frame = a.frame ?? (a.shape === 'book' ? 'cover' : 'round');
     const img = (x: number, y: number, iw: number, ih: number, clip: string) => `<clipPath id="${id}c">${clip}</clipPath><image href="${esc(a.photo!)}" x="${String(x)}" y="${String(y)}" width="${String(iw)}" height="${String(ih)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id}c)"/>`;
+    if (frame === 'painted') {
+      // A painting already carries its shadow: drawn as it is, nothing around it.
+      const r = a.ratio ?? 1;
+      w = r >= 1 ? 170 : Math.round(170 * r);
+      h = r >= 1 ? Math.round(170 / r) : 170;
+      return [wrap(id, '', `<image href="${esc(a.photo)}" x="0" y="0" width="${String(w)}" height="${String(h)}" preserveAspectRatio="xMidYMid meet"/>`, w, h, size), w * size, h * size];
+    }
     if (frame === 'cutout') {
       // The item's own outline, with a white die-cut edge grown from its alpha.
       const r = a.ratio ?? 1;
@@ -85,7 +93,7 @@ export function stickerSvg(a: Art, size = 1): [string, number, number] {
       const edgeColor = a.golden ? '#e2b23a' : '#ffffff';
       const defs = `${gold}<filter id="${id}e" x="-10%" y="-10%" width="120%" height="120%"><feMorphology in="SourceAlpha" operator="dilate" radius="4.5" result="d"/><feGaussianBlur in="d" stdDeviation=".5" result="s"/><feFlood flood-color="${edgeColor}"/><feComposite in2="s" operator="in" result="edge"/><feMerge><feMergeNode in="edge"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
       body = `<image href="${esc(a.photo)}" x="${String(pad)}" y="${String(pad)}" width="${String(w - pad * 2)}" height="${String(h - pad * 2)}" preserveAspectRatio="xMidYMid meet" filter="url(#${id}e)"/>`;
-      return poster(id, defs, body, w, h, size, a);
+      return poster(id, defs, body, w, h, size);
     }
     if (frame === 'cover') {
       w = 118; h = 168;
@@ -115,7 +123,7 @@ export function stickerSvg(a: Art, size = 1): [string, number, number] {
         ${img(9, 9, 138, 138, '<circle cx="78" cy="78" r="69"/>')}
         ${gloss('M30 52 A 54 54 0 0 1 72 20')}`;
     }
-    return poster(id, gold, body, w, h, size, a);
+    return poster(id, gold, body, w, h, size);
   }
 
   switch (a.shape) {
@@ -274,17 +282,13 @@ export function stickerSvg(a: Art, size = 1): [string, number, number] {
       break;
     }
   }
-  return poster(id, gold, body, w, h, size, a);
+  return poster(id, gold, body, w, h, size);
 }
 
-// The Pop Poster look: around the sticker's white edge, a thick ring in the item's own color, then a hard ink
-// shadow offset down and to the right, like a screen print. Done once here, so photos, covers, cut-outs and
-// drawn stickers all get it.
-const RING = 6;
-const DROP = 5;
-const PAD = RING + DROP + 2;
+// Anything not yet painted gets the same soft contact shadow the paintings have, so the page reads as one set.
+const PAD = 10;
 
-/** The boldest of the item's colors, for the ring: not near-black, not near-white. */
+/** The boldest of the item's colors: not near-black, not near-white. Used for the card's list dots. */
 export function accentOf(colors: readonly string[], golden = false): string {
   if (golden) return '#e2b23a';
   let best = '#f6b52a';
@@ -301,14 +305,10 @@ export function accentOf(colors: readonly string[], golden = false): string {
   return score < 0.2 ? '#f6b52a' : best;
 }
 
-function poster(id: string, defs: string, body: string, w: number, h: number, size: number, a: Art): [string, number, number] {
+function poster(id: string, defs: string, body: string, w: number, h: number, size: number): [string, number, number] {
   const W = w + PAD * 2, H = h + PAD * 2;
-  const ring = `<filter id="${id}p" x="-20%" y="-20%" width="140%" height="140%">
-    <feMorphology in="SourceAlpha" operator="dilate" radius="${String(RING)}" result="d"/>
-    <feFlood flood-color="${accentOf(a.colors, a.golden)}"/><feComposite in2="d" operator="in" result="ring"/>
-    <feOffset in="d" dx="${String(DROP)}" dy="${String(DROP)}" result="o"/><feFlood flood-color="#160b06"/><feComposite in2="o" operator="in" result="ink"/>
-    <feMerge><feMergeNode in="ink"/><feMergeNode in="ring"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
-  return [wrap(id, defs + ring, `<g transform="translate(${String(PAD)} ${String(PAD)})" filter="url(#${id}p)">${body}</g>`, W, H, size), W * size, H * size];
+  const shadow = `<filter id="${id}p" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#3c2814" flood-opacity=".22"/></filter>`;
+  return [wrap(id, defs + shadow, `<g transform="translate(${String(PAD)} ${String(PAD)})" filter="url(#${id}p)">${body}</g>`, W, H, size), W * size, H * size];
 }
 
 function wrap(id: string, defs: string, body: string, w: number, h: number, size: number): string {

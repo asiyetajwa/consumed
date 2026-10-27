@@ -91,23 +91,22 @@ const app = (id: SceneId, step: string, title: string, sub: string, accent: stri
 
 export const WelcomeScene = app('welcome', 'Getting Started', 'Four quick questions', 'Your name, what you love, and who is in your circle.', theme.sun);
 export const FriendsScene = app('friends', 'Friends first', 'Every friend’s day is one card', 'Tap it and it turns to the next thing they enjoyed.', theme.pink);
-export const SongScene = app('song', 'Log a song', 'Type it. Muse Spark finds it.', 'The real cover drops onto your day as a sticker.', theme.sun);
+export const SongScene = app('song', 'Log a song', 'Type it. Muse Spark finds it.', 'Muse Image paints the real cover onto your day.', theme.sun);
 export const BookScene = app('book', 'Log a book', 'Same book? It’s a match.', 'Maya is reading it too.', theme.blue);
-export const MealScene = app('meal', 'Log a meal', 'Snap it. SAM 3.1 cuts it out.', 'Muse Spark names it; SAM 3.1 follows its own edge.', theme.tomato);
+export const MealScene = app('meal', 'Log a meal', 'Snap it. Muse Image paints it.', 'Muse Spark names it and SAM 3.1 lifts it off the table.', theme.tomato);
 export const DareScene = app('dare', 'Taste dare', 'Something purple', 'Leo’s dare, done with an ube latte.', theme.purple);
-export const TodayScene = app('today', 'Your page', 'Today, as an album page', 'Drag a sticker loose. Tidy it back in one tap.', theme.green);
-export const TonightScene = app('tonight', 'Tonight', 'Crack open your day', 'Your card, and Muse Image’s painting of it on the back.', theme.sun);
+export const TodayScene = app('today', 'Your page', 'Today, hand-painted', 'Drag anything loose. Tidy it back in one tap.', theme.green);
+export const TonightScene = app('tonight', 'Tonight', 'Crack open your day', 'Your day as one poster, and Muse Image’s painting of it on the back.', theme.sun);
 export const ShareScene = app('share', 'Share', 'Made for your story', 'Or straight to the group chat.', theme.green);
 
-// A Pop Poster sticker for the title scenes: white edge, a ring in a color, a hard ink shadow.
+// A painting from the app's catalog for the title scenes, lifted off its paper with its own soft shadow.
 const Sticker: React.FC<{ src: string; size: number; x: number; y: number; rot: number; at: number }> = ({ src, size, x, y, rot, at }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const p = popAt(frame, fps, at, 11);
-  // The white edge, color ring and ink shadow are baked into stickers/<name>.poster.png, so frames render fast.
   return (
     <div style={{ position: 'absolute', left: x - size / 2, top: y - size / 2, width: size, height: size, transform: `rotate(${String(rot)}deg) scale(${String(p)})`, display: 'grid', placeItems: 'center' }}>
-      <Img src={staticFile(`stickers/${src.replace(/\.(png|jpg)$/, '.poster.png')}`)} style={{ maxWidth: '100%', maxHeight: '100%' }} />
+      <Img src={staticFile(`stickers/${src}`)} style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: src.endsWith('.jpg') ? '50%' : 0 }} />
     </div>
   );
 };
@@ -135,7 +134,7 @@ const Tile: React.FC<{ at: number; name: string; does: string; color: string; x:
   const { fps } = useVideoConfig();
   const p = popAt(frame, fps, at, 13);
   return (
-    <div style={{ position: 'absolute', left: x, top: 330, width: 500, height: 330, borderRadius: 40, background: theme.paper, boxShadow: `0 0 0 6px ${color}, 12px 12px 0 6px ${theme.ink}`, padding: 44, transform: `scale(${String(p)}) rotate(${String((1 - p) * -6)}deg)`, fontFamily: theme.font, color: theme.ink }}>
+    <div style={{ position: 'absolute', left: x, top: 330, width: 500, height: 330, borderRadius: 40, background: theme.paper, boxShadow: `inset 0 0 0 3px ${color}, 0 30px 60px -30px rgba(60, 35, 10, .35)`, padding: 44, transform: `scale(${String(p)}) rotate(${String((1 - p) * -6)}deg)`, fontFamily: theme.font, color: theme.ink }}>
       <div style={{ fontSize: 26, fontWeight: 800, letterSpacing: 3, textTransform: 'uppercase', color }}>Meta Model API</div>
       <div style={{ marginTop: 18, fontSize: 64, fontWeight: 900, letterSpacing: -2.5 }}>{name}</div>
       <div style={{ marginTop: 14, fontSize: 32, fontWeight: 500, color: theme.ink2, lineHeight: 1.3 }}>{does}</div>
@@ -149,10 +148,10 @@ export const HowScene: React.FC = () => {
   return (
     <AbsoluteFill style={{ fontFamily: theme.font, color: theme.ink }}>
       <Tile at={10} name="Muse Spark" does="Reads your photos and searches" color={theme.green} x={150} />
-      <Tile at={40} name="SAM 3.1" does="Cuts each one out along its edge" color={theme.tomato} x={710} />
-      <Tile at={70} name="Muse Image" does="Paints your whole day" color={theme.purple} x={1270} />
+      <Tile at={40} name="SAM 3.1" does="Lifts each dish off the table" color={theme.tomato} x={710} />
+      <Tile at={70} name="Muse Image" does="Paints every item and your day" color={theme.purple} x={1270} />
       <div style={{ position: 'absolute', left: 0, right: 0, top: 790, textAlign: 'center', fontSize: 64, fontWeight: 900, letterSpacing: -2, opacity: t, transform: `translateY(${String((1 - t) * 20)}px)` }}>
-        A whole day: about <span style={{ color: theme.green }}>4&cent;</span>
+        A whole day: about <span style={{ color: theme.green }}>10&cent;</span>
       </div>
     </AbsoluteFill>
   );

@@ -9,7 +9,8 @@
     "start": "npm run build && tsx --env-file-if-exists=.env src/server/index.ts",
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc -p . --noEmit",
-    "fetch-art": "tsx --env-file-if-exists=.env scripts/fetch-art.ts"
+    "fetch-art": "tsx --env-file-if-exists=.env scripts/fetch-art.ts",
+    "paint-art": "tsx --env-file-if-exists=.env scripts/paint-art.ts"
   },
   "engines": {
     "node": ">=22"

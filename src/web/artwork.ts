@@ -1,6 +1,6 @@
-// Real artwork for stickers. Catalog items use the files listed in art/manifest.json (made by
-// `npm run fetch-art`); anything else asks the server, which looks in public catalogs and, for food, can have
-// Muse Image picture it. Without either, stickers fall back to their painted drawing.
+// Artwork for stickers. Catalog items use the paintings listed in art/manifest.json (made by `npm run fetch-art`
+// and `npm run paint-art`); anything else asks the server for its real cover (public catalogs, or for food a Muse
+// Image picture), which Muse Image then repaints. Without either, stickers fall back to a drawing.
 
 import type { ArtResponse, Identified } from '../shared/types.js';
 import { frameFor, loadImage, type Art } from './stickers.js';
@@ -8,8 +8,10 @@ import { frameFor, loadImage, type Art } from './stickers.js';
 export interface CatalogArt {
   file: string;
   source: string;
-  /** Set when the file is a SAM cut-out (a PNG with transparency). */
+  /** Width over height, for a cut-out or a painting (a PNG with transparency). */
   ratio?: number;
+  /** Set when the file is a Muse Image painting lifted off its background. */
+  painted?: boolean;
 }
 
 let manifest: Record<string, CatalogArt> = {};
@@ -20,7 +22,7 @@ export async function loadManifest(): Promise<void> {
     const res = await fetch('art/manifest.json');
     if (res.ok) manifest = (await res.json()) as typeof manifest;
   } catch {
-    // No artwork files: painted stickers.
+    // No artwork files: drawn stickers.
   }
 }
 
@@ -28,15 +30,15 @@ export function catalogArt(title: string): CatalogArt | undefined {
   return manifest[key(title)];
 }
 
-type Drawable = Pick<Identified, 'shape' | 'colors' | 'title' | 'creator' | 'category' | 'kind'> & { photo?: string; golden?: boolean; ratio?: number; cutout?: boolean };
+type Drawable = Pick<Identified, 'shape' | 'colors' | 'title' | 'creator' | 'category' | 'kind'> & { photo?: string; golden?: boolean; ratio?: number; cutout?: boolean; painted?: boolean };
 
 /** What to draw for an item: its own photo or artwork when it has one, the catalog file otherwise. */
 export function artFor(it: Drawable, override?: Partial<Art>): Art {
   if (it.photo) {
-    return { shape: it.shape, colors: it.colors, title: it.title, creator: it.creator, photo: it.photo, golden: it.golden, frame: it.cutout ? 'cutout' : frameFor(it.category, it.kind), ratio: it.ratio, ...override };
+    return { shape: it.shape, colors: it.colors, title: it.title, creator: it.creator, photo: it.photo, golden: it.golden, frame: it.painted ? 'painted' : it.cutout ? 'cutout' : frameFor(it.category, it.kind), ratio: it.ratio, ...override };
   }
   const known = catalogArt(it.title);
-  return { shape: it.shape, colors: it.colors, title: it.title, creator: it.creator, photo: known?.file, golden: it.golden, frame: known?.ratio ? 'cutout' : frameFor(it.category, it.kind), ratio: known?.ratio, ...override };
+  return { shape: it.shape, colors: it.colors, title: it.title, creator: it.creator, photo: known?.file, golden: it.golden, frame: known?.painted ? 'painted' : known?.ratio ? 'cutout' : frameFor(it.category, it.kind), ratio: known?.ratio, ...override };
 }
 
 /** Asks the server for artwork; returns a small JPEG data URL and its source, or null. */

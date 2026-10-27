@@ -18,6 +18,8 @@ export interface Sticker extends Identified {
   /** Width over height, for cut-outs. */
   ratio?: number;
   cutout?: boolean;
+  /** Set once Muse Image has painted it. */
+  painted?: boolean;
   artSource?: string;
   golden?: boolean;
   source: 'photo' | 'search';

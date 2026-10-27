@@ -4,7 +4,7 @@
 import express from 'express';
 import { join } from 'node:path';
 import { searchCatalog } from '../shared/catalog.js';
-import type { ArtRequest, ArtResponse, CardRequest, CutoutRequest, IdentifyRequest, IdentifyResponse, Status } from '../shared/types.js';
+import type { ArtRequest, ArtResponse, CardRequest, CutoutRequest, IdentifyRequest, IdentifyResponse, PaintRequest, PaintResponse, Status } from '../shared/types.js';
 import { findArt } from './art.js';
 import { IMAGE_MODEL, liveReason, Meta, TEXT_MODEL } from './meta.js';
 import { BillingError, BudgetError, SpendGuard } from './spend.js';
@@ -16,7 +16,7 @@ const guard = new SpendGuard(budget, process.env.CONSUMED_LEDGER?.trim() || join
 const meta = liveReason() === null ? new Meta(process.env.META_API_KEY!.trim(), guard) : null;
 
 // A small per-visitor allowance, so a public deployment cannot drain the budget.
-const LIMITS = { cutout: Number(process.env.CONSUMED_CUTOUTS_PER_HOUR ?? 40), art: 150, picture: Number(process.env.CONSUMED_PICTURES_PER_HOUR ?? 15), identify: Number(process.env.CONSUMED_IDENTIFY_PER_HOUR ?? 40), card: Number(process.env.CONSUMED_CARDS_PER_HOUR ?? 4) };
+const LIMITS = { paint: Number(process.env.CONSUMED_PAINTS_PER_HOUR ?? 30), cutout: Number(process.env.CONSUMED_CUTOUTS_PER_HOUR ?? 40), art: 150, picture: Number(process.env.CONSUMED_PICTURES_PER_HOUR ?? 15), identify: Number(process.env.CONSUMED_IDENTIFY_PER_HOUR ?? 40), card: Number(process.env.CONSUMED_CARDS_PER_HOUR ?? 4) };
 const hits = new Map<string, number[]>();
 function allow(kind: keyof typeof LIMITS, ip: string): boolean {
   const key = `${kind}:${ip}`;
@@ -127,6 +127,31 @@ app.post('/api/cutout', async (req, res) => {
       return;
     }
     res.json(cut);
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+// Muse Image repaints the item (your cut-out photo, or the real cover) in the hand-painted style of the page.
+app.post('/api/paint', async (req, res) => {
+  const body = req.body as PaintRequest;
+  if (!meta) {
+    res.status(409).json({ error: 'Painting needs live mode.' });
+    return;
+  }
+  if (!body || typeof body.image !== 'string' || !body.image.startsWith('data:image/') || body.image.length > 1_000_000 || !['audio', 'book', 'food'].includes(body.category)) {
+    res.status(400).json({ error: 'Send a small image and its category.' });
+    return;
+  }
+  if (!allow('paint', req.ip ?? '')) {
+    res.status(429).json({ error: 'Too many paintings this hour.' });
+    return;
+  }
+  const clip = (v: unknown, n: number) => String(v ?? '').slice(0, n);
+  try {
+    const out = await meta.paint(body.image, { category: body.category, kind: clip(body.kind, 20), title: clip(body.title, 120), creator: clip(body.creator, 120), noun: clip(body.noun, 60) });
+    const reply: PaintResponse = { image: out.image, model: IMAGE_MODEL, costUsd: out.costUsd };
+    res.json(reply);
   } catch (e) {
     fail(res, e);
   }

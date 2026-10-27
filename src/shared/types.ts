@@ -104,3 +104,20 @@ export interface ArtResponse {
   source: string;
   link?: string;
 }
+
+export interface PaintRequest {
+  /** A JPEG data URL of the photo or cover, at most 640 pixels on its long side. */
+  image: string;
+  category: Category;
+  kind: string;
+  title: string;
+  creator: string;
+  noun: string;
+}
+
+export interface PaintResponse {
+  /** Muse Image's painting on a plain cream background, as a data URL; the browser lifts it off. */
+  image: string;
+  model: string;
+  costUsd: number;
+}

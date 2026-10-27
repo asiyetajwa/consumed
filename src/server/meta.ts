@@ -67,12 +67,20 @@ export class Meta {
 
   private async post(path: string, body: unknown): Promise<{ json: unknown; ms: number }> {
     const t0 = Date.now();
-    const res = await this.fetchImpl(`${BASE}${path}`, {
+    const send = () => this.fetchImpl(`${BASE}${path}`, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.key}`, 'content-type': 'application/json' },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    let res = await send();
+    // The API now and then answers a valid request with a passing 404 model_not_found or a 5xx; neither is
+    // billed, and the same request a moment later succeeds. One retry.
+    if (res.status === 404 || res.status >= 500) {
+      await res.text();
+      await new Promise((r) => setTimeout(r, 800));
+      res = await send();
+    }
     const text = await res.text();
     if (!res.ok) {
       if (isBillingError(res.status, text)) {
@@ -209,16 +217,23 @@ export class Meta {
     let ok = false;
     let ms = 0;
     try {
-      const out = await this.post('/images/edits', { model: IMAGE_MODEL, prompt, images: [{ image_url: image }], n: 1, output_format: 'png', response_format: 'b64_json' });
+      // Muse Image answers edits with WebP whatever format is asked for, and refuses large inputs as model_not_found,
+      // so callers send a JPEG of 640 pixels or less.
+      const out = await this.post('/images/edits', { model: IMAGE_MODEL, prompt, images: [{ image_url: image }], n: 1, response_format: 'b64_json' });
       ms = out.ms;
       const b64 = (out.json as { data?: { b64_json?: string }[] }).data?.[0]?.b64_json;
       if (!b64) throw new Error('Muse Image returned no image.');
       ok = true;
-      return { image: `data:image/png;base64,${b64}`, costUsd: price };
+      return { image: `data:${mimeOf(b64)};base64,${b64}`, costUsd: price };
     } finally {
       release();
       this.guard.record({ at: new Date().toISOString(), scope, model: IMAGE_MODEL, tokensIn: 0, tokensOut: 0, costUsd: ok ? price : 0, latencyMs: ms, ok });
     }
+  }
+
+  /** Muse Image repaints a photo or a cover in the realfood.gov illustration style. */
+  async paint(image: string, item: PaintSubject): Promise<{ image: string; costUsd: number }> {
+    return this.edit(image, paintPrompt(item), 'paint');
   }
 
   /** One square Muse Image picture from a prompt, through the spend guard. */
@@ -248,6 +263,27 @@ export class Meta {
       this.guard.record({ at: new Date().toISOString(), scope, model: IMAGE_MODEL, tokensIn: 0, tokensOut: 0, costUsd: ok ? price : 0, latencyMs: ms, ok });
     }
   }
+}
+
+/** What a painting is asked to keep. */
+export type PaintSubject = Pick<Identified, 'category' | 'kind' | 'title' | 'creator' | 'noun'>;
+
+const PAINT_STYLE = 'Paint it as a hand-painted gouache and colored-pencil illustration, like the food illustrations on the new US Dietary Guidelines food pyramid poster: true-to-life proportions, rich saturated colors, visible soft brush and pencil texture, gentle highlights, and one soft grey contact shadow underneath. Isolated, centered, filling about 80 percent of the frame, on a plain flat cream background (#fcf9ee). No outline, no sticker border, no extra objects, no added text.';
+
+/** The repainting prompt: food keeps its dish, music becomes a record in its sleeve, a book a standing hardcover. */
+export function paintPrompt(it: PaintSubject): string {
+  const name = it.title.replace(/["<>]/g, '').slice(0, 80);
+  if (it.category === 'food') return `Repaint this exact ${it.noun || name}, keeping the same container, ingredients, colors, packaging and arrangement. ${PAINT_STYLE}`;
+  if (it.category === 'book') return `Turn this book cover into a painted physical object: a hardcover book standing upright, turned to a clear three-quarter angle so its spine and the edge of its pages show, with this exact cover artwork and title on the front. Keep the cover recognizable. ${PAINT_STYLE}`;
+  if (it.kind === 'audiobook' || it.kind === 'podcast') return `Turn this ${it.kind} cover art into a painted physical object: a square card of this exact artwork leaning against a pair of over-ear headphones, at a slight three-quarter angle. Keep the artwork recognizable. ${PAINT_STYLE}`;
+  return `Turn this album cover into a painted physical object: a square vinyl record sleeve carrying this exact artwork, with the black vinyl record sliding out of its right side, turned slightly at a three-quarter angle. Keep the artwork recognizable. ${PAINT_STYLE}`;
+}
+
+/** The image type of base64 data, from its first bytes. */
+export function mimeOf(b64: string): string {
+  if (b64.startsWith('UklGR')) return 'image/webp';
+  if (b64.startsWith('iVBOR')) return 'image/png';
+  return 'image/jpeg';
 }
 
 export function picturePrompt(visual: string): string {

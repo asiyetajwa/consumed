@@ -103,7 +103,7 @@ h1 { font-size: 56px; font-weight: 900; letter-spacing: -2.8px; line-height: .95
 .sticker .fx { display: flex; flex-direction: column; align-items: center; }
 .sticker .rot { transform: rotate(calc(var(--r, 0) * 1deg + var(--tilt, 0) * 1deg)); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
 .sticker.lifted .rot, .sticker.twisting .rot { transition: none; }
-.sticker .art { width: 108px; height: 108px; display: grid; place-items: center; transition: filter .16s, transform .16s; }
+.sticker .art { width: 128px; height: 128px; display: grid; place-items: center; transition: filter .16s, transform .16s; }
 .sticker svg { display: block; pointer-events: none; }
 .sticker .cap { margin-top: 8px; width: 100%; text-align: center; pointer-events: none; line-height: 1.2; }
 .sticker .cap b { display: block; font-size: 14px; font-weight: 800; letter-spacing: -.2px; color: var(--ink); overflow-wrap: anywhere; text-wrap: balance; }
@@ -178,7 +178,7 @@ h1 { font-size: 56px; font-weight: 900; letter-spacing: -2.8px; line-height: .95
 .friend-deck .layer.front { box-shadow: 0 16px 26px -14px rgba(60, 35, 10, .5); }
 .tile-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tile-cut { width: 100%; height: 100%; display: grid; place-items: center; }
-.tile-cut img { width: 84%; height: 84%; object-fit: contain; filter: drop-shadow(0 8px 10px rgba(60, 35, 10, .22)); }
+.tile-cut img { width: 84%; height: 84%; object-fit: contain; }
 .deck-cap { min-width: 0; line-height: 1.25; }
 .deck-cap b { display: block; font-size: 16px; font-weight: 800; letter-spacing: -.2px; text-wrap: balance; overflow-wrap: anywhere; }
 .deck-cap span { display: block; margin-top: 3px; font-size: 13px; color: var(--muted); }
@@ -255,7 +255,12 @@ h1 { font-size: 56px; font-weight: 900; letter-spacing: -2.8px; line-height: .95
 .result { position: absolute; left: 0; right: 0; bottom: 0; background: var(--paper); border-radius: 34px 34px 0 0; box-shadow: 0 -20px 40px -10px rgba(40, 25, 10, .28); padding: 12px 22px calc(18px + env(safe-area-inset-bottom, 0px)); animation: sheetUp .34s cubic-bezier(.2, .8, .2, 1); }
 .grab { width: 44px; height: 5px; border-radius: 3px; background: #d7cfbb; margin: 0 auto 12px; }
 .res-row { display: flex; gap: 14px; align-items: center; }
-.res-art { flex: none; width: 108px; height: 108px; display: grid; place-items: center; filter: drop-shadow(0 8px 10px rgba(60, 35, 10, .25)); }
+.res-art { flex: none; width: 108px; height: 108px; display: grid; place-items: center; position: relative; }
+/* While Muse Image paints, the real picture breathes under a soft brush-stroke shimmer. */
+.res-art.painting svg { animation: breathe 1.4s ease-in-out infinite; }
+.res-art.painting::after { content: ''; position: absolute; inset: -6px; border-radius: 18px; background: linear-gradient(110deg, transparent 30%, rgba(252, 249, 236, .75) 50%, transparent 70%) 0 0 / 250% 100%; animation: brush 1.4s linear infinite; pointer-events: none; }
+@keyframes breathe { 50% { transform: scale(.96); opacity: .8; } }
+@keyframes brush { from { background-position: 120% 0; } to { background-position: -120% 0; } }
 .res-art svg { max-width: 108px; max-height: 108px; width: auto; height: auto; }
 .res-text { min-width: 0; }
 .eyebrow { font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; font-weight: 800; color: var(--green-2); display: flex; align-items: center; gap: 7px; }
