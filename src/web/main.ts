@@ -8,6 +8,8 @@ import { alsoHas, FRIENDS, matches, matchLine, REACTIONS } from './friends.js';
 import { isMuted, play, setMuted, soundFor, unlock } from './sound.js';
 import { artFor, catalogArt, fetchArt, loadManifest } from './artwork.js';
 import { makeCutout, requestCutout } from './cutout.js';
+import { runOnboarding } from './onboarding.js';
+import { deckHtml, flip } from './deck.js';
 import { cropPhoto, downsize, stickerSvg } from './stickers.js';
 import { dayKey, load, loggedDays, save, startFresh, type State, type Sticker } from './store.js';
 
@@ -15,9 +17,10 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const app = $('app');
 let state: State = load();
 let status: Status | null = null;
-const VIEWS = ['today', 'friends', 'tonight'] as const;
+// Friends comes first: the app opens on what your friends consumed today.
+const VIEWS = ['friends', 'today', 'tonight'] as const;
 type View = (typeof VIEWS)[number];
-let view: View = 'today';
+let view: View = 'friends';
 
 const today = () => (state.days[dayKey()] ??= []);
 const persist = () => save(state);
@@ -65,18 +68,35 @@ document.addEventListener('click', (e) => {
   });
 }
 
-// ---------- today ----------
-const board = $('board');
+/** A profile picture: the painted demo portraits live in avatars/. */
+const avatar = (id: string, name: string) => `<img class="av" src="avatars/${id}.jpg" alt="${name}" width="44" height="44">`;
 
-function caption(s: Sticker): string {
+// ---------- today ----------
+// Today is a sticker album page: stickers sit in a two-column grid, all the same size, with a gentle alternating
+// tilt and a two-line caption. Drag one and it comes loose to sit anywhere; Tidy Up puts everything back.
+const board = $('board');
+const page = $('page');
+const COLS = 2;
+const CELL_H = 184;
+const ART = 108;
+
+function captionLines(s: Sticker): [string, string] {
   if (s.category === 'food') {
-    const h = new Date(s.at).getHours();
-    const when = s.kind === 'drink' || s.title.length > 16 ? '' : h < 11 ? ', breakfast' : h < 16 ? ', lunch' : h < 21 ? ', dinner' : ', late';
-    return `${s.title.toLowerCase()}${when}`;
+    const d = new Date(s.at);
+    const h = d.getHours();
+    const meal = s.kind === 'drink' ? 'Drink' : s.kind === 'snack' || s.kind === 'dessert' ? 'Snack' : h < 11 ? 'Breakfast' : h < 16 ? 'Lunch' : h < 21 ? 'Dinner' : 'Late';
+    return [s.title, `${meal} · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`];
   }
-  if (s.golden) return `${s.title}, finished!`;
-  if (s.category === 'audio' && s.creator) return `${s.title}, ${s.creator.split(',')[0] ?? ''}`;
-  return s.title;
+  const by = (s.creator.split(/,| read by /)[0] ?? '').trim();
+  if (s.golden) return [s.title, `Finished · ${by}`];
+  return [s.title, by || (s.category === 'book' ? 'Book' : 'Listening')];
+}
+
+/** The sticker drawn to fit a square of `box` pixels, whatever its shape. */
+function fitted(s: Parameters<typeof artFor>[0], box: number): string {
+  const art = artFor(s);
+  const [, w, h] = stickerSvg(art, 1);
+  return stickerSvg(art, box / Math.max(w, h))[0];
 }
 
 function stickerEl(s: Sticker): HTMLElement {
@@ -86,39 +106,92 @@ function stickerEl(s: Sticker): HTMLElement {
   el.tabIndex = 0;
   el.setAttribute('role', 'button');
   el.setAttribute('aria-label', `${s.title}${s.creator ? `, ${s.creator}` : ''}. Open`);
-  const [svg] = stickerSvg(artFor(s), 0.8);
-  el.innerHTML = `<div class="fx">${svg}<span class="cap"></span></div>`;
-  el.querySelector('.cap')!.textContent = caption(s);
-  place(el, s);
+  const [t, sub] = captionLines(s);
+  el.innerHTML = `<div class="fx"><div class="art"><div class="rot">${fitted(s, ART)}</div></div><div class="cap"><b></b><span></span></div></div>`;
+  el.querySelector('.cap b')!.textContent = t;
+  el.querySelector('.cap span')!.textContent = sub;
   wire(el, s);
   return el;
 }
 
+/** Where a tidy sticker sits: the centre of its art, in pixels on the sheet. */
+function slot(i: number): [number, number, number] {
+  const w = board.clientWidth || 360;
+  const col = i % COLS, row = Math.floor(i / COLS);
+  const tilt = [-3, 2.5, 2, -2.5][i % 4]!;
+  return [(w / COLS) * (col + 0.5), row * CELL_H + 14 + ART / 2, tilt];
+}
+
 function place(el: HTMLElement, s: Sticker) {
-  el.style.left = `${String(s.x)}%`;
-  el.style.top = `${String(s.y)}%`;
-  el.style.zIndex = String(s.z);
-  el.style.setProperty('--r', String(s.r));
-  el.style.setProperty('--s', String(s.s));
+  const i = today().indexOf(s);
+  let x: number, y: number, r: number;
+  if (s.free) {
+    x = (s.x / 100) * (board.clientWidth || 360);
+    y = s.y;
+    r = s.r;
+  } else {
+    [x, y, r] = slot(i);
+  }
+  el.style.left = `${String(x)}px`;
+  el.style.top = `${String(y - ART / 2)}px`;
+  el.style.zIndex = String(s.free ? 100 + s.z : s.z);
+  el.style.setProperty('--r', String(r));
+  el.style.setProperty('--s', String(s.free ? s.s : 1));
+}
+
+function layout() {
+  const items = today();
+  const rows = Math.ceil(Math.max(items.length + 1, 4) / COLS);
+  const freeBottom = Math.max(0, ...items.filter((s) => s.free).map((s) => s.y + ART));
+  board.style.height = `${String(Math.max(rows * CELL_H, freeBottom) + 8)}px`;
+  for (const el of board.querySelectorAll<HTMLElement>('.sticker')) {
+    const s = items.find((x) => x.id === el.dataset.id);
+    if (s) place(el, s);
+  }
+  // Empty slots show where the next stickers go, and open the log for what is missing today.
+  board.querySelectorAll('.slot').forEach((e) => e.remove());
+  const missing: Category[] = (['audio', 'book', 'food'] as Category[]).filter((c) => !items.some((s) => s.category === c));
+  const LABEL: Record<Category, string> = { audio: 'A Song', book: 'A Book', food: 'A Bite' };
+  for (let i = items.length; i < rows * COLS; i++) {
+    const [x, y] = slot(i);
+    const c = missing[i - items.length] ?? 'food';
+    const b = document.createElement('button');
+    b.className = 'slot';
+    b.style.left = `${String(x)}px`;
+    b.style.top = `${String(y - ART / 2)}px`;
+    b.innerHTML = `<span class="plus">+</span><span>${i - items.length < missing.length ? LABEL[c] : 'Log More'}</span>`;
+    b.setAttribute('aria-label', `Log ${LABEL[c].toLowerCase()}`);
+    b.onclick = () => openLog(c);
+    board.appendChild(b);
+  }
+  $('tidy').hidden = !items.some((s) => s.free);
 }
 
 function renderToday() {
   const d = new Date();
   $('today-date').textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-  const items = today();
-  $('today-count').textContent = items.length ? `${String(items.length)} consumed` : '';
-  board.replaceChildren(...items.map(stickerEl));
-  if (!items.length) board.insertAdjacentHTML('beforeend', '<div class="empty-board"><div><b>Your first sticker goes here</b>Log a song, a book or a bite</div></div>');
+  board.replaceChildren(...today().map(stickerEl));
+  layout();
+  renderTally();
   renderDare();
   renderChain(false);
 }
 
+function renderTally() {
+  const items = today();
+  const n = (c: Category) => items.filter((s) => s.category === c).length;
+  const before = $('tally').dataset.counts ?? '';
+  const now = (['audio', 'book', 'food'] as Category[]).map((c) => String(n(c))).join(',');
+  $('tally').innerHTML = (['audio', 'book', 'food'] as Category[]).map((c, i) => `<span class="t-${c}${before && before.split(',')[i] !== now.split(',')[i] ? ' bump' : ''}"><i></i>${{ audio: 'Listened', book: 'Read', food: 'Ate' }[c]} <b>${String(n(c))}</b></span>`).join('');
+  $('tally').dataset.counts = now;
+}
+
 function renderChain(grow: boolean) {
   const days = loggedDays(state);
-  const shown = Math.min(days, 9);
+  const shown = Math.min(days, 6);
   const colors = ['#f6b52a', '#e8432e', '#2f6b2a', '#3c6fd8', '#6b2d5c'];
-  const links = Array.from({ length: shown }, (_, i) => `<rect class="${grow && i === shown - 1 ? 'new' : ''}" x="${String(3 + i * 17)}" y="${i % 2 ? 9 : 5}" width="24" height="${i % 2 ? 14 : 22}" rx="7" fill="none" stroke="${colors[i % colors.length]!}" stroke-width="4.5"/>`).join('');
-  $('chain').innerHTML = days ? `<svg width="${String(shown * 17 + 12)}" height="32" viewBox="0 0 ${String(shown * 17 + 12)} 32" aria-hidden="true">${links}</svg><span>${String(days)} ${days === 1 ? 'day' : 'days'}, no pressure</span>` : '<span>Your chain starts today</span>';
+  const links = Array.from({ length: shown }, (_, i) => `<rect class="${grow && i === shown - 1 ? 'new' : ''}" x="${String(2 + i * 11)}" y="${i % 2 ? 7 : 4}" width="16" height="${i % 2 ? 10 : 16}" rx="5" fill="none" stroke="${colors[i % colors.length]!}" stroke-width="3.2"/>`).join('');
+  $('chain').innerHTML = `<svg width="${String(shown * 11 + 8)}" height="24" viewBox="0 0 ${String(shown * 11 + 8)} 24" aria-hidden="true">${links}</svg><div><b>${days ? `Day ${String(days)}` : 'Day 1'}</b><span>${days ? 'Your chain, no pressure' : 'Your chain starts today'}</span></div>`;
 }
 
 const PURPLE = /purple|violet|lavender|plum|ube|grape|acai|açaí|blackberr|eggplant/i;
@@ -127,30 +200,25 @@ function renderDare() {
   const done = today().some((s) => s.category === 'food' && (PURPLE.test(s.colorName) || PURPLE.test(s.title)));
   const el = $('dare');
   el.classList.toggle('done', done);
-  el.innerHTML = done ? `<small>Dare done</small>Something purple. ${leo.name} will love this.` : `<small>Today’s dare, from ${leo.name}</small>${leo.dare ?? ''}`;
+  el.innerHTML = `${done ? '<span class="mark">✓</span>' : avatar(leo.id, leo.name)}<div><b>${done ? 'Dare done' : `${leo.name}’s dare`}</b><span>${done ? `${leo.name} gets a ping` : 'Something purple today'}</span></div>`;
   if (done && !state.dareDone[dayKey()]) {
     state.dareDone[dayKey()] = true;
     persist();
     const r = el.getBoundingClientRect();
     setTimeout(() => confetti(r.left + r.width / 2, r.top, 60, 0.6), 700);
-    setTimeout(() => toast(`Dare done. ${leo.name} gets a ping.`), 900);
+    setTimeout(() => toast(`Dare done. ${leo.name} gets a ping.`, undefined, leo.id), 900);
   }
 }
 
-/** Finds the emptiest spot on the board for a new sticker. */
-function freeSpot(): [number, number] {
-  const taken = today().map((s) => [s.x, s.y]);
-  let best: [number, number] = [50, 45];
-  let bestD = -1;
-  for (let gy = 0; gy < 4; gy++) {
-    for (let gx = 0; gx < 3; gx++) {
-      const x = 26 + gx * 24 + (gy % 2 ? 5 : -3), y = 26 + gy * 15;
-      const d = taken.length ? Math.min(...taken.map(([tx, ty]) => Math.hypot((tx! - x) * 1.1, ty! - y))) : 100 - Math.hypot(x - 50, y - 40);
-      if (d > bestD) { bestD = d; best = [x, y]; }
-    }
-  }
-  return best;
-}
+$('tidy').addEventListener('click', () => {
+  for (const s of today()) s.free = false;
+  persist();
+  board.classList.add('tidying');
+  layout();
+  play('paper', { volume: 0.5, rate: 1.2 });
+  setTimeout(() => board.classList.remove('tidying'), 600);
+});
+window.addEventListener('resize', () => layout());
 
 // Dragging, twisting and tapping.
 function wire(el: HTMLElement, s: Sticker) {
@@ -178,7 +246,17 @@ function wire(el: HTMLElement, s: Sticker) {
   el.addEventListener('pointermove', (e) => {
     if (!pts.has(e.pointerId)) return;
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const rect = board.getBoundingClientRect();
+    if (!s.free && (pts.size >= 2 || Math.hypot(e.clientX - start.x, e.clientY - start.y) >= 6)) {
+      // Comes loose from its slot, from exactly where it sits.
+      const [x, y, r] = slot(today().indexOf(s));
+      s.free = true;
+      s.x = (x / board.clientWidth) * 100;
+      s.y = y;
+      s.r = r;
+      s.s = 1;
+      start.sx = s.x; start.sy = s.y; start.r = s.r; start.s = 1;
+      $('tidy').hidden = false;
+    }
     if (pts.size >= 2) {
       const [a, b] = two();
       s.r = start.r + ((Math.atan2(b.y - a.y, b.x - a.x) - start.ang) * 180) / Math.PI;
@@ -190,8 +268,8 @@ function wire(el: HTMLElement, s: Sticker) {
     const dx = e.clientX - start.x, dy = e.clientY - start.y;
     if (!moved && Math.hypot(dx, dy) < 6) return;
     if (!moved) { moved = true; el.classList.add('lifted'); }
-    s.x = Math.max(4, Math.min(96, start.sx + (dx / rect.width) * 100));
-    s.y = Math.max(4, Math.min(96, start.sy + (dy / rect.height) * 100));
+    s.x = Math.max(8, Math.min(92, start.sx + (dx / board.clientWidth) * 100));
+    s.y = Math.max(ART / 2, Math.min(board.clientHeight + 120, start.sy + dy));
     // A little swing in the direction of travel, like holding a real sticker by its corner.
     const v = e.clientX - lastX;
     lastX = e.clientX;
@@ -215,11 +293,17 @@ function wire(el: HTMLElement, s: Sticker) {
     fx.classList.add('wobble');
     play('pop', { volume: 0.45, rate: 1.15 });
     persist();
+    layout();
   };
   el.addEventListener('pointerup', end);
   el.addEventListener('pointercancel', end);
   el.addEventListener('wheel', (e) => {
     e.preventDefault();
+    if (!s.free) {
+      const [x, y, r] = slot(today().indexOf(s));
+      Object.assign(s, { free: true, x: (x / board.clientWidth) * 100, y, r, s: 1 });
+      $('tidy').hidden = false;
+    }
     if (e.shiftKey || e.ctrlKey) s.s = Math.max(0.6, Math.min(1.7, s.s - e.deltaY * 0.002));
     else s.r += e.deltaY * 0.15;
     place(el, s);
@@ -228,29 +312,35 @@ function wire(el: HTMLElement, s: Sticker) {
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDetail(s); return; }
     const step = e.shiftKey ? 5 : 2;
+    if (!s.free && /^(Arrow|\[|\])/.test(e.key)) {
+      const [x, y, r] = slot(today().indexOf(s));
+      Object.assign(s, { free: true, x: (x / board.clientWidth) * 100, y, r, s: 1 });
+    }
     const moves: Record<string, () => void> = {
-      ArrowLeft: () => (s.x = Math.max(4, s.x - step)), ArrowRight: () => (s.x = Math.min(96, s.x + step)),
-      ArrowUp: () => (s.y = Math.max(4, s.y - step)), ArrowDown: () => (s.y = Math.min(96, s.y + step)),
+      ArrowLeft: () => (s.x = Math.max(8, s.x - step)), ArrowRight: () => (s.x = Math.min(92, s.x + step)),
+      ArrowUp: () => (s.y = Math.max(ART / 2, s.y - step * 4)), ArrowDown: () => (s.y += step * 4),
       '[': () => (s.r -= 8), ']': () => (s.r += 8),
     };
     const m = moves[e.key];
-    if (m) { e.preventDefault(); m(); place(el, s); persist(); }
+    if (m) { e.preventDefault(); m(); place(el, s); persist(); layout(); }
   });
 }
 
 /** A new sticker drops onto today with a wobble, its pop and its own sound. */
 function stick(item: Identified, extra: Partial<Sticker>) {
   if (view !== 'today') go('today');
-  const [x, y] = freeSpot();
   const firstToday = today().length === 0;
-  const s: Sticker = { ...item, id: `${String(Date.now())}-${String(Math.random()).slice(2, 6)}`, at: new Date().toISOString(), x, y, r: Math.round((Math.random() - 0.5) * 18), s: 1, z: Math.max(0, ...today().map((t) => t.z)) + 1, source: 'search', ...extra };
+  const s: Sticker = { ...item, id: `${String(Date.now())}-${String(Math.random()).slice(2, 6)}`, at: new Date().toISOString(), x: 50, y: 0, r: 0, s: 1, z: Math.max(0, ...today().map((t) => t.z)) + 1, source: 'search', ...extra };
   today().push(s);
   persist();
-  board.querySelector('.empty-board')?.remove();
   const el = stickerEl(s);
   el.querySelector('.fx')!.classList.add('drop');
   board.appendChild(el);
-  $('today-count').textContent = `${String(today().length)} consumed`;
+  layout();
+  renderTally();
+  // Bring its slot into view before it lands.
+  const [, y] = slot(today().length - 1);
+  page.scrollTo({ top: Math.max(0, y - page.clientHeight / 2), behavior: 'smooth' });
   // The landing frame of the drop animation is about 520 ms in.
   setTimeout(() => {
     play('pop');
@@ -264,7 +354,7 @@ function stick(item: Identified, extra: Partial<Sticker>) {
     renderDare();
     if (firstToday) renderChain(true);
     const m = matches(state).find((mm) => mm.mine.id === s.id);
-    if (m) toast(`${m.friend.name} has this too. See Friends.`, () => go('friends'));
+    if (m) toast(`${m.friend.name} has this too`, () => go('friends'), m.friend.id);
   }, 1000);
 }
 
@@ -280,7 +370,7 @@ function openDetail(s: Sticker) {
   $('d-credit').textContent = s.source === 'photo' ? 'Your photo' : credit ? `Art: ${credit}` : '';
   $('d-note').textContent = s.note;
   $('d-note').hidden = !s.note;
-  $('d-friends').innerHTML = FRIENDS.map((f) => `<button data-flick="${f.id}" class="${state.flicked.some((x) => x.to === f.id && x.title === s.title) ? 'sent' : ''}"><span class="av" style="background:${f.color}">${f.name[0]!}</span>${f.name}</button>`).join('');
+  $('d-friends').innerHTML = FRIENDS.map((f) => `<button data-flick="${f.id}" class="${state.flicked.some((x) => x.to === f.id && x.title === s.title) ? 'sent' : ''}">${avatar(f.id, f.name)}${f.name}</button>`).join('');
   $('d-remove').textContent = 'Remove';
   $('detail').hidden = false;
 }
@@ -328,7 +418,8 @@ function setCat(c: Category) {
   $('vf-sub').textContent = VF_SUB[c];
   $('chips').innerHTML = QUICK[c].map((q) => `<button type="button" data-q="${q.replace(/"/g, '&quot;')}">${q}</button>`).join('');
 }
-function openLog() {
+function openLog(start?: Category) {
+  if (start) cat = start;
   photo = null; found = null;
   ($('q') as HTMLInputElement).value = '';
   $('vf-img').hidden = true; $('vf').classList.remove('has-photo'); $('vf-empty').hidden = false;
@@ -340,7 +431,7 @@ function openLog() {
   $('muse-badge').classList.toggle('demo', !live);
 }
 const closeLog = () => { $('log').hidden = true; };
-$('log-btn').addEventListener('click', openLog);
+document.querySelectorAll('.js-log').forEach((b) => b.addEventListener('click', () => openLog()));
 $('log-close').addEventListener('click', closeLog);
 document.querySelector('.seg')!.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-cat]');
@@ -453,7 +544,9 @@ function showResult() {
   const friend = alsoHas(it);
   const verb = it.category === 'book' ? 'is reading this too' : it.category === 'audio' ? 'played this today too' : 'had this today too';
   $('res-note').innerHTML = '';
-  $('res-note').append(document.createTextNode(it.note));
+  const typed = document.createTextNode('');
+  $('res-note').append(typed);
+  typeOut(typed, it.note);
   if (friend) {
     const b = document.createElement('b');
     b.textContent = ` ${friend.name} ${verb}.`;
@@ -473,21 +566,40 @@ $('stick').addEventListener('click', () => {
 });
 
 // ---------- friends ----------
+const escAttr = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const escText = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+/** One face of a depth card: the cover or photo filling the tile, or a cut-out on a soft tint of its colors. */
+function tileFor(it: Identified): string {
+  const a = artFor(it);
+  const tint = `color-mix(in srgb, ${it.colors[0] === '#1b1716' ? it.colors[1] : it.colors[0]} 26%, #fcf9ec)`;
+  if (a.photo && a.frame !== 'cutout') return `<img class="tile-img" src="${escAttr(a.photo)}" alt="">`;
+  if (a.photo) return `<div class="tile-cut" style="background:${tint}"><img src="${escAttr(a.photo)}" alt=""></div>`;
+  return `<div class="tile-cut" style="background:${tint}">${fitted(it, 130)}</div>`;
+}
+
+function deckCaption(it: Identified, i: number, n: number): string {
+  const by = it.category === 'food' ? it.detail : (it.creator.split(/,| read by /)[0] ?? '');
+  const dots = Array.from({ length: n }, (_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('');
+  return `<b>${escText(it.title)}</b><span>${escText(by)}</span><div class="dots">${dots}</div><small>Tap the card</small>`;
+}
+
 const count = (n: number | undefined, mine: boolean) => { const t = (n ?? 0) + (mine ? 1 : 0); return t ? String(t) : ''; };
 function renderFriends() {
   const ms = matches(state);
   const parts: string[] = [];
   const top = ms[0];
   if (top) {
-    const [svg] = stickerSvg(artFor(top.item), 0.62);
-    parts.push(`<article class="match pop"><small>A match this week</small><p></p><div class="avs"><span class="av">${state.name[0]!}</span><span class="av" style="background:${top.friend.color}">${top.friend.name[0]!}</span></div><div class="art">${svg}</div></article>`);
+    const svg = fitted(top.item, 100);
+    parts.push(`<article class="match pop"><small>A match this week</small><p></p><div class="avs">${avatar('sam', state.name)}${avatar(top.friend.id, top.friend.name)}</div><div class="art">${svg}</div></article>`);
   }
-  for (const f of FRIENDS) {
-    const mini = f.items.map((it, i) => `<div style="transform:rotate(${String([-7, 6, -3][i] ?? 0)}deg)">${stickerSvg(artFor(it), 0.5)[0]}</div>`).join('');
+  for (const f of FRIENDS.filter((x) => !state.circle || state.circle.includes(x.id))) {
+    const first = f.items[0]!;
+    const mini = `<div class="deck-wrap" data-friend="${f.id}" data-i="0" role="button" tabindex="0" aria-label="${f.name}'s things today. Tap for the next one.">${deckHtml(tileFor(first), 'friend-deck')}</div><div class="deck-cap">${deckCaption(first, 0, f.items.length)}</div>`;
     const mine = state.reacted[f.id] ?? [];
     const reacts = REACTIONS.map((r) => `<button data-react="${f.id}" data-emoji="${r}" aria-pressed="${String(mine.includes(r))}" aria-label="React ${r}">${r}<span>${count(f.reactions[r], mine.includes(r))}</span></button>`).join('');
     const flicked = state.flicked.filter((x) => x.to === f.id).at(-1);
-    parts.push(`<article class="friend"><span class="av" style="background:${f.color}">${f.name[0]!}</span><div><div class="name">${f.name}</div><div class="when">${String(f.items.length)} things today · ${f.line}</div></div><div class="mini">${mini}</div>${flicked ? '<div class="flicked"></div>' : ''}<div class="reacts">${reacts}</div></article>`);
+    parts.push(`<article class="friend">${avatar(f.id, f.name)}<div><div class="name">${f.name}</div><div class="when">${String(f.items.length)} things today · ${f.line}</div></div><div class="mini">${mini}</div>${flicked ? '<div class="flicked"></div>' : ''}<div class="reacts">${reacts}</div></article>`);
   }
   const feed = $('feed');
   feed.innerHTML = parts.join('');
@@ -499,7 +611,31 @@ function renderFriends() {
   });
   $('friends-count').textContent = ms.length ? `${String(ms.length)} ${ms.length === 1 ? 'match' : 'matches'}` : '';
 }
+// A friend's three things live on one depth card: each tap turns it to the next, with that thing's own sound.
+function nextThing(wrap: HTMLElement) {
+  if (wrap.dataset.busy) return;
+  const f = FRIENDS.find((x) => x.id === wrap.dataset.friend);
+  if (!f) return;
+  const i = (Number(wrap.dataset.i) + 1) % f.items.length;
+  const it = f.items[i]!;
+  wrap.dataset.i = String(i);
+  wrap.dataset.busy = '1';
+  play('pop', { volume: 0.35, rate: 1.4 });
+  setTimeout(() => {
+    wrap.parentElement!.querySelector('.deck-cap')!.innerHTML = deckCaption(it, i, f.items.length);
+    play(soundFor(it.category, it.kind), { volume: 0.7 });
+  }, 380);
+  void flip(wrap.querySelector<HTMLElement>('.deck')!, tileFor(it)).then(() => delete wrap.dataset.busy);
+}
+
+$('feed').addEventListener('keydown', (e) => {
+  const w = (e.target as HTMLElement).closest<HTMLElement>('.deck-wrap');
+  if (w && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); nextThing(w); }
+});
+
 $('feed').addEventListener('click', (e) => {
+  const w = (e.target as HTMLElement).closest<HTMLElement>('.deck-wrap');
+  if (w) { nextThing(w); return; }
   const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-react]');
   if (!b) return;
   const id = b.dataset.react!, emoji = b.dataset.emoji!;
@@ -512,11 +648,30 @@ $('feed').addEventListener('click', (e) => {
   b.setAttribute('aria-pressed', String(on));
   b.querySelector('span')!.textContent = count(f.reactions[emoji], on);
   b.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 260 });
+  if (on) burst(b, emoji);
 });
+
+/** A few copies of the emoji float up out of the button. */
+function burst(from: HTMLElement, emoji: string) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = from.getBoundingClientRect();
+  for (let i = 0; i < 6; i++) {
+    const e = document.createElement('span');
+    e.className = 'burst';
+    e.textContent = emoji;
+    e.style.left = `${String(r.left + r.width / 2)}px`;
+    e.style.top = `${String(r.top)}px`;
+    document.body.appendChild(e);
+    const dx = (Math.random() - 0.5) * 90, dy = -60 - Math.random() * 70;
+    e.animate([{ transform: 'translate(-50%, 0) scale(.6)', opacity: 1 }, { transform: `translate(calc(-50% + ${String(dx)}px), ${String(dy)}px) scale(1.2) rotate(${String(dx / 3)}deg)`, opacity: 0 }], { duration: 700 + i * 60, easing: 'cubic-bezier(.2,.8,.2,1)' }).onfinish = () => e.remove();
+  }
+}
 
 // ---------- tonight ----------
 let cardUrl: string | null = null;
 let cardBlob: Blob | null = null;
+let faces: { blob: Blob; url: string }[] = [];
+let face = 0;
 const signature = () => today().map((s) => s.id).join(',');
 
 function renderTonight() {
@@ -542,7 +697,21 @@ function renderTonight() {
 }
 
 $('crack-btn').addEventListener('click', () => void crack());
-$('stage').addEventListener('click', () => { if ($('stage').classList.contains('idle')) void crack(); });
+$('stage').addEventListener('click', (e) => {
+  if ($('stage').classList.contains('idle')) { void crack(); return; }
+  // The finished card turns in your hand like a piece of glass.
+  const deck = (e.target as HTMLElement).closest('#card')?.querySelector<HTMLElement>('.deck');
+  if (deck && $('stage').classList.contains('open')) {
+    play('pop', { volume: 0.4, rate: 1.3 });
+    if (faces.length > 1) {
+      face = (face + 1) % faces.length;
+      cardBlob = faces[face]!.blob;
+      cardUrl = faces[face]!.url;
+      $('tonight-hint').textContent = face ? 'Painted by Muse Image from your day' : 'Your day, on one card';
+      void flip(deck, `<img src="${cardUrl}" alt="">`);
+    } else void flip(deck);
+  }
+});
 
 async function crack() {
   const items = today();
@@ -570,17 +739,23 @@ async function crack() {
       // The stickers make the card instead.
     }
   }
-  cardBlob = await renderCard(items, { date: new Date(), name: state.name, chain: loggedDays(state), painting });
-  if (cardUrl) URL.revokeObjectURL(cardUrl);
-  cardUrl = URL.createObjectURL(cardBlob);
-  const img = $('card-img') as HTMLImageElement;
+  // The poster is the card. With a painting from Muse Image, it is the card's other side: a tap turns it over.
+  const opts = { date: new Date(), name: state.name, chain: loggedDays(state) };
+  for (const f of faces) URL.revokeObjectURL(f.url);
+  faces = [];
+  for (const blob of [await renderCard(items, opts), ...(painting ? [await renderCard(items, { ...opts, painting })] : [])]) faces.push({ blob, url: URL.createObjectURL(blob) });
+  face = 0;
+  cardBlob = faces[0]!.blob;
+  cardUrl = faces[0]!.url;
+  const img = new Image();
   img.src = cardUrl;
   await img.decode().catch(() => undefined);
+  $('card').innerHTML = deckHtml(`<img src="${cardUrl}" alt="">`, 'card-deck');
   stage.className = 'capsule-stage open';
   play('crack');
   const r = stage.getBoundingClientRect();
   confetti(r.left + r.width / 2, r.top + r.height / 2, 160, 1.6);
-  $('tonight-hint').textContent = painting ? 'Painted by Muse Image from your day' : 'Your day, on one card';
+  $('tonight-hint').textContent = painting ? 'Tap the card to turn it over' : 'Your day, on one card';
   $('actions').hidden = true;
   $('share').hidden = false;
 }
@@ -623,11 +798,13 @@ $('sound-btn').addEventListener('click', () => { setMuted(!isMuted()); syncSound
 ($('sound-toggle') as HTMLInputElement).addEventListener('change', (e) => { setMuted(!(e.target as HTMLInputElement).checked); syncSound(); play('pop'); });
 $('menu-btn').addEventListener('click', () => {
   const days = loggedDays(state);
+  $('me-name').textContent = state.name;
   $('me-days').textContent = `${String(days)} ${days === 1 ? 'day' : 'days'} logged`;
   $('fresh').textContent = 'Start Fresh';
   $('menu').hidden = false;
 });
 $('menu').addEventListener('click', (e) => { if (e.target === $('menu')) $('menu').hidden = true; });
+$('replay').addEventListener('click', () => { $('menu').hidden = true; startOnboarding(); });
 $('fresh').addEventListener('click', () => {
   const b = $('fresh');
   if (b.textContent !== 'Tap Again to Clear Everything') { b.textContent = 'Tap Again to Clear Everything'; return; }
@@ -644,9 +821,10 @@ document.addEventListener('keydown', (e) => {
 });
 
 let toastTimer = 0;
-function toast(text: string, action?: () => void) {
+function toast(text: string, action?: () => void, who?: string) {
   const t = $('toast');
   t.replaceChildren(document.createTextNode(text));
+  if (who) t.insertAdjacentHTML('afterbegin', `<img class="av" src="avatars/${who}.jpg" alt="">`);
   if (action) {
     const b = document.createElement('button');
     b.textContent = text.startsWith('Removed') ? 'Undo' : 'Open';
@@ -673,13 +851,37 @@ async function loadStatus() {
     : 'Search works from a small built-in catalog and the card is made from your stickers. Photos need live mode.';
 }
 
+/** Types text into a node a few letters at a time, the way Muse would say it. */
+function typeOut(node: Text, text: string) {
+  let i = 0;
+  const step = () => {
+    i = Math.min(text.length, i + 2);
+    node.textContent = text.slice(0, i);
+    if (i < text.length && node.isConnected) setTimeout(step, 16);
+  };
+  step();
+}
+
+function startOnboarding() {
+  runOnboarding($('onboard'), (a) => {
+    state.name = a.name;
+    state.circle = a.circle;
+    state.onboarded = true;
+    persist();
+    go('friends');
+    renderFriends();
+    setTimeout(() => toast('Maya waved hello', undefined, 'maya'), 700);
+  });
+}
+
 // ---------- start ----------
 syncSound();
 await loadManifest();
 renderToday();
 const start = location.hash.slice(1);
-go((VIEWS as readonly string[]).includes(start) ? (start as View) : 'today', false);
+go((VIEWS as readonly string[]).includes(start) ? (start as View) : 'friends', false);
 void loadStatus();
+if (!state.onboarded) startOnboarding();
 window.addEventListener('hashchange', () => {
   const h = location.hash.slice(1);
   if ((VIEWS as readonly string[]).includes(h) && h !== view) go(h as View, false);

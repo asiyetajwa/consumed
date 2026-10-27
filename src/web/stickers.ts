@@ -83,9 +83,9 @@ export function stickerSvg(a: Art, size = 1): [string, number, number] {
       h = r >= 1 ? Math.round(156 / r) : 156;
       const pad = 6;
       const edgeColor = a.golden ? '#e2b23a' : '#ffffff';
-      const defs = `${gold}<filter id="${id}e" x="-10%" y="-10%" width="120%" height="120%"><feMorphology in="SourceAlpha" operator="dilate" radius="3.2" result="d"/><feGaussianBlur in="d" stdDeviation=".5" result="s"/><feFlood flood-color="${edgeColor}"/><feComposite in2="s" operator="in" result="edge"/><feMerge><feMergeNode in="edge"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+      const defs = `${gold}<filter id="${id}e" x="-10%" y="-10%" width="120%" height="120%"><feMorphology in="SourceAlpha" operator="dilate" radius="4.5" result="d"/><feGaussianBlur in="d" stdDeviation=".5" result="s"/><feFlood flood-color="${edgeColor}"/><feComposite in2="s" operator="in" result="edge"/><feMerge><feMergeNode in="edge"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
       body = `<image href="${esc(a.photo)}" x="${String(pad)}" y="${String(pad)}" width="${String(w - pad * 2)}" height="${String(h - pad * 2)}" preserveAspectRatio="xMidYMid meet" filter="url(#${id}e)"/>`;
-      return [wrap(id, defs, body, w, h, size), w * size, h * size];
+      return poster(id, defs, body, w, h, size, a);
     }
     if (frame === 'cover') {
       w = 118; h = 168;
@@ -115,7 +115,7 @@ export function stickerSvg(a: Art, size = 1): [string, number, number] {
         ${img(9, 9, 138, 138, '<circle cx="78" cy="78" r="69"/>')}
         ${gloss('M30 52 A 54 54 0 0 1 72 20')}`;
     }
-    return [wrap(id, gold, body, w, h, size), w * size, h * size];
+    return poster(id, gold, body, w, h, size, a);
   }
 
   switch (a.shape) {
@@ -274,7 +274,41 @@ export function stickerSvg(a: Art, size = 1): [string, number, number] {
       break;
     }
   }
-  return [wrap(id, gold, body, w, h, size), w * size, h * size];
+  return poster(id, gold, body, w, h, size, a);
+}
+
+// The Pop Poster look: around the sticker's white edge, a thick ring in the item's own color, then a hard ink
+// shadow offset down and to the right, like a screen print. Done once here, so photos, covers, cut-outs and
+// drawn stickers all get it.
+const RING = 6;
+const DROP = 5;
+const PAD = RING + DROP + 2;
+
+/** The boldest of the item's colors, for the ring: not near-black, not near-white. */
+export function accentOf(colors: readonly string[], golden = false): string {
+  if (golden) return '#e2b23a';
+  let best = '#f6b52a';
+  let score = -1;
+  for (const c of colors) {
+    const n = parseInt(c.slice(1), 16);
+    const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const light = (max + min) / 2;
+    if (light < 0.18 || light > 0.9) continue;
+    const sat = max === min ? 0 : (max - min) / (1 - Math.abs(2 * light - 1));
+    if (sat > score) { score = sat; best = c; }
+  }
+  return score < 0.2 ? '#f6b52a' : best;
+}
+
+function poster(id: string, defs: string, body: string, w: number, h: number, size: number, a: Art): [string, number, number] {
+  const W = w + PAD * 2, H = h + PAD * 2;
+  const ring = `<filter id="${id}p" x="-20%" y="-20%" width="140%" height="140%">
+    <feMorphology in="SourceAlpha" operator="dilate" radius="${String(RING)}" result="d"/>
+    <feFlood flood-color="${accentOf(a.colors, a.golden)}"/><feComposite in2="d" operator="in" result="ring"/>
+    <feOffset in="d" dx="${String(DROP)}" dy="${String(DROP)}" result="o"/><feFlood flood-color="#160b06"/><feComposite in2="o" operator="in" result="ink"/>
+    <feMerge><feMergeNode in="ink"/><feMergeNode in="ring"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+  return [wrap(id, defs + ring, `<g transform="translate(${String(PAD)} ${String(PAD)})" filter="url(#${id}p)">${body}</g>`, W, H, size), W * size, H * size];
 }
 
 function wrap(id: string, defs: string, body: string, w: number, h: number, size: number): string {

@@ -7,7 +7,8 @@ import type { Identified } from '../shared/types.js';
 export interface Sticker extends Identified {
   id: string;
   at: string;
-  /** Centre on the board, in percent. */
+  /** Only for a sticker dragged out of its slot: centre across the page (percent of its width) and down it (pixels). */
+  free?: boolean;
   x: number;
   y: number;
   r: number;
@@ -37,6 +38,10 @@ export interface State {
   dareDone: Record<string, boolean>;
   cards: Record<string, string>;
   sample: boolean;
+  /** Set once the first-open questions are answered. */
+  onboarded?: boolean;
+  /** Friend ids in your circle. */
+  circle?: string[];
 }
 
 const KEY = 'consumed:v1';

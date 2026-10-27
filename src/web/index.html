@@ -13,12 +13,12 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div id="app" data-view="today">
+<div id="app" data-view="friends">
   <header class="top">
-    <button class="round small" id="menu-btn" aria-label="Your profile and settings"><span class="av" id="me-av">S</span></button>
+    <button class="round small" id="menu-btn" aria-label="Your profile and settings"><img class="av" id="me-av" src="avatars/sam.jpg" alt="Sam" width="36" height="36"></button>
     <nav class="pillnav" aria-label="Pages">
-      <button data-go="today" aria-current="page">Today</button>
-      <button data-go="friends">Friends</button>
+      <button data-go="friends" aria-current="page">Friends</button>
+      <button data-go="today">Today</button>
       <button data-go="tonight">Tonight</button>
     </nav>
     <button class="round small" id="sound-btn" aria-label="Sound on" aria-pressed="true">
@@ -27,36 +27,45 @@
   </header>
 
   <main class="views" id="views">
+    <section class="view" id="v-friends" aria-label="Friends">
+      <div class="head"><h1>Friends</h1><div class="date"><span>Today, one feed</span><span class="count" id="friends-count"></span></div></div>
+      <div class="feed" id="feed"></div>
+      <div class="dock">
+        <button class="logbtn js-log">Log Something <span class="plus" aria-hidden="true">+</span></button>
+        <button class="round" data-go="today" aria-label="Your today">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>
+        </button>
+      </div>
+    </section>
+
     <section class="view" id="v-today" aria-label="Today">
       <div class="head">
-        <h1>Today</h1>
-        <div class="date"><span id="today-date"></span><span class="count" id="today-count"></span></div>
+        <div class="title-row"><h1>Today</h1><button class="tidy" id="tidy" hidden>Tidy Up</button></div>
+        <div class="date"><span id="today-date"></span></div>
+        <div class="tally" id="tally"></div>
       </div>
-      <div class="board" id="board" aria-label="Today's stickers. Drag to move, twist with two fingers to turn."></div>
+      <div class="page" id="page">
+        <div class="sheet" id="board" aria-label="Today's stickers. Drag one to move it, twist with two fingers to turn it."></div>
+      </div>
       <div class="under">
-        <div class="dare" id="dare"></div>
-        <div class="chain" id="chain"></div>
+        <div class="pillcard" id="chain"></div>
+        <div class="pillcard dare" id="dare"></div>
       </div>
       <div class="dock">
-        <button class="logbtn" id="log-btn">Log Something <span class="plus" aria-hidden="true">+</span></button>
+        <button class="logbtn js-log" id="log-btn">Log Something <span class="plus" aria-hidden="true">+</span></button>
         <button class="round" data-go="friends" aria-label="Friends">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.6c2.6.2 4.2 1.9 4.6 4.6"/></svg>
         </button>
       </div>
     </section>
 
-    <section class="view" id="v-friends" aria-label="Friends">
-      <div class="head"><h1>Friends</h1><div class="date"><span>Today, one feed</span><span class="count" id="friends-count"></span></div></div>
-      <div class="feed" id="feed"></div>
-    </section>
-
     <section class="view night" id="v-tonight" aria-label="Tonight">
       <div class="reveal" id="reveal">
-        <p class="hint" id="tonight-hint">Your day is sealed inside</p>
+        <div class="night-head"><p class="hint" id="tonight-hint">Your day is sealed inside</p></div>
         <div class="capsule-stage" id="stage">
           <svg class="shell top-shell" viewBox="0 0 250 124" aria-hidden="true"><path d="M8 122 C 8 40, 70 4, 125 4 S 242 40, 242 122 L 205 106 L 175 122 L 140 102 L 110 122 L 78 102 L 45 122 Z" fill="#f6b52a"/><path d="M44 68 C 64 30, 120 16, 168 24" stroke="#fff3c4" stroke-width="10" fill="none" stroke-linecap="round" opacity=".7"/></svg>
           <svg class="shell bot-shell" viewBox="0 0 250 124" aria-hidden="true"><path d="M8 2 L 45 18 L 78 2 L 110 22 L 140 2 L 175 22 L 205 2 L 242 18 C 242 82, 190 120, 125 120 S 8 82, 8 2 Z" fill="#e8432e"/><path d="M40 50 C 56 84, 92 100, 124 102" stroke="#fff" stroke-opacity=".25" stroke-width="9" fill="none" stroke-linecap="round"/></svg>
-          <img class="card" id="card-img" alt="Your Consumed card for today">
+          <div class="card" id="card" role="img" aria-label="Your Consumed card for today. Tap it to turn it."></div>
         </div>
         <div class="actions" id="actions">
           <button class="crack" id="crack-btn">Crack It Open</button>
@@ -149,16 +158,18 @@
 <div class="scrim" id="menu" hidden>
   <div class="menu" role="dialog" aria-modal="true" aria-label="Settings">
     <div class="grab"></div>
-    <div class="me"><span class="av big">S</span><div><b>Sam</b><span id="me-days"></span></div></div>
+    <div class="me"><img class="av big" src="avatars/sam.jpg" alt="" width="52" height="52"><div><b id="me-name">Sam</b><span id="me-days"></span></div></div>
     <label class="row"><span>Sounds</span><span class="toggle"><input type="checkbox" id="sound-toggle" role="switch" checked><i></i></span></label>
     <div class="row"><span>Muse</span><span class="status" id="muse-status">Checking</span></div>
     <p class="fine" id="muse-reason"></p>
+    <button class="ghost wide" id="replay">Replay the Welcome</button>
     <button class="ghost wide" id="fresh">Start Fresh</button>
     <p class="fine">Your log stays in this browser. Friends here are sample friends.</p>
   </div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div id="onboard"></div>
 <script type="module" src="app.js"></script>
 </body>
 </html>
