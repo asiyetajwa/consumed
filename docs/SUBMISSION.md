@@ -86,7 +86,7 @@ Pairing models beats asking one model for everything. Muse Spark names the objec
 
 ## Spend
 
-- Meta Model API spend for the whole build, from the ledger: about $1.45 of the hackathon credit. That covers development, testing, painting the catalog, and recording the film.
+- Meta Model API spend for the whole build, from the ledger: about $1.60 of the hackathon credit. That covers development, testing, painting the catalog, and recording the film.
 - $0 on any card.
 
 ## Points to keep straight
