@@ -333,8 +333,8 @@ function morph(src: Uint8Array, width: number, height: number, r: number, dilate
       for (let k = 0; k < m; k++) {
         if (k + r < m) count += input[at(k + r)]!;
         if (k - r - 1 >= 0) count -= input[at(k - r - 1)]!;
-        const span = Math.min(m - 1, k + r) - Math.max(0, k - r) + 1;
-        out[at(k)] = dilate ? (count > 0 ? 1 : 0) : count === span ? 1 : 0;
+        // Shrinking counts the area beyond the edge as empty, so closing a mask never draws lines along its border.
+        out[at(k)] = dilate ? (count > 0 ? 1 : 0) : count === 2 * r + 1 ? 1 : 0;
       }
     }
     return out;

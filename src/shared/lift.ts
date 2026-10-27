@@ -44,7 +44,9 @@ export function lift(px: Uint8ClampedArray | Uint8Array, w: number, h: number, k
   // With SAM's mask, anything clearly outside the dish is paper (or its shadow), even where the paper is uneven.
   if (keep) {
     const near = box(keep, w, h, r * 2, true);
-    for (let i = 0; i < n; i++) if (!near[i]) out[i] = 1;
+    const loose = (i: number) => Math.max(Math.abs(px[i * 4]! - bg[0]), Math.abs(px[i * 4 + 1]! - bg[1]), Math.abs(px[i * 4 + 2]! - bg[2])) < TOLERANCE * 2;
+    // Right at the dish's edge, paper-colored scraps outside SAM's outline go too.
+    for (let i = 0; i < n; i++) if (!near[i] || (!keep[i] && loose(i))) out[i] = 1;
   }
 
   // Keep the object: specks of paper texture the flood could not reach are dropped, as is anything far smaller
