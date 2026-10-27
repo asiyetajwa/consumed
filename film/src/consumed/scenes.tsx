@@ -97,7 +97,7 @@ export const MealScene = app('meal', 'Log a meal', 'Snap it. Muse Image paints i
 export const DareScene = app('dare', 'Taste dare', 'Something purple', 'Leo’s dare, done with an ube latte.', theme.purple);
 export const TodayScene = app('today', 'Your page', 'Today, hand-painted', 'Drag anything loose. Tidy it back in one tap.', theme.green);
 export const TonightScene = app('tonight', 'Tonight', 'Crack open your day', 'Your day as one poster, and Muse Image’s painting of it on the back.', theme.sun);
-export const ShareScene = app('share', 'Share', 'Made for your story', 'Or straight to the group chat.', theme.green);
+export const ShareScene = app('share', 'Share', 'Made for your Instagram story', 'Or straight to your WhatsApp group chat.', theme.green);
 
 // A painting from the app's catalog for the title scenes, lifted off its paper with its own soft shadow.
 const Sticker: React.FC<{ src: string; size: number; x: number; y: number; rot: number; at: number }> = ({ src, size, x, y, rot, at }) => {
@@ -151,7 +151,7 @@ export const HowScene: React.FC = () => {
       <Tile at={40} name="SAM 3.1" does="Lifts each dish off the table" color={theme.tomato} x={710} />
       <Tile at={70} name="Muse Image" does="Paints every item and your day" color={theme.purple} x={1270} />
       <div style={{ position: 'absolute', left: 0, right: 0, top: 790, textAlign: 'center', fontSize: 64, fontWeight: 900, letterSpacing: -2, opacity: t, transform: `translateY(${String((1 - t) * 20)}px)` }}>
-        A whole day: about <span style={{ color: theme.green }}>10&cent;</span>
+        Three Meta models, <span style={{ color: theme.green }}>one hand-painted day</span>
       </div>
     </AbsoluteFill>
   );

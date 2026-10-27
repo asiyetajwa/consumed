@@ -33,7 +33,7 @@ export const SCENES: SceneSpec<SceneId>[] = [
   { id: 'dare', voiceover: 'Leo dared me to eat something purple today. <break time="0.2s" /> An ube latte counts.', minSeconds: clip('dare') },
   { id: 'today', voiceover: 'Today is an illustrated page. Drag anything loose, and tidy it back in one tap.', minSeconds: clip('today') },
   { id: 'tonight', voiceover: 'At night, your day seals into a capsule. Crack it open, and there\'s your card. Turn it over, and Muse-Image has painted the same day.', minSeconds: clip('tonight') },
-  { id: 'share', voiceover: 'Share it to your story, or straight to the group chat.', minSeconds: clip('share', 1.2) },
-  { id: 'how', voiceover: 'Muse-Spark reads, SAM lifts, and Muse-Image paints. <break time="0.2s" /> A whole day costs about ten cents.', minSeconds: 8.5 },
+  { id: 'share', voiceover: 'Share it to your Instagram story, or straight to your WhatsApp group chat.', minSeconds: clip('share', 1.2) },
+  { id: 'how', voiceover: 'Muse-Spark reads, SAM lifts, and Muse-Image paints. <break time="0.2s" /> Three Meta models, one hand-painted day.', minSeconds: 8.5 },
   { id: 'outro', voiceover: 'Consumed. <break time="0.4s" /> Your day, worth sharing.', minSeconds: 5.6, after: { file: 'sfx/sting.mp3', gap: 0.2, seconds: 1.8, volume: 0.55 } },
 ];
