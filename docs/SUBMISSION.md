@@ -13,7 +13,7 @@ Deadline: November 5, 2026, 02:00 UTC.
 
 **Repo:** https://github.com/asiyetajwa/consumed (public, MIT)
 
-**Video:** the YouTube link (public, under 3 minutes). The file is `film/out/ConsumedLandscape.mp4`.
+**Video:** https://youtu.be/xpzTUJv_nhA (public on YouTube, 1:52). The source file is `film/out/ConsumedLandscape.mp4`.
 
 **Thumbnails:** `docs/thumbnail.jpg` (3:2, Devpost) and `docs/thumbnail-youtube.jpg` (16:9).
 
